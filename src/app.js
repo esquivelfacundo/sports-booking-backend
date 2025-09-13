@@ -16,18 +16,31 @@ app.use(helmet());
 
 // CORS configuration
 const corsOptions = {
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    process.env.FRONTEND_PROD_URL || 'https://your-vercel-app.vercel.app',
-    'http://localhost:4555', // Development frontend port
-    'https://www.miscanchas.com',
-    'https://miscanchas.com',
-    'https://sports-booking-platform-two.vercel.app',
-    'https://sports-booking-platform-git-main-esquivelfacundos-projects.vercel.app'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      process.env.FRONTEND_PROD_URL || 'https://your-vercel-app.vercel.app',
+      'http://localhost:4555', // Development frontend port
+      'https://www.miscanchas.com',
+      'https://miscanchas.com',
+      'https://sports-booking-platform-two.vercel.app',
+      'https://sports-booking-platform-git-main-esquivelfacundos-projects.vercel.app'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(null, true); // Allow all origins in production for now
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept'],
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));

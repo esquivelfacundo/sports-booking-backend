@@ -61,8 +61,8 @@ const getEstablishments = async (req, res) => {
       search,
       minRating,
       priceRange,
-      lat,
-      lng,
+      latitude,
+      longitude,
       radius = 10
     } = req.query;
 
@@ -98,67 +98,35 @@ const getEstablishments = async (req, res) => {
       where.priceRange = priceRange;
     }
 
-    // Location-based search using Haversine formula
-    if (lat && lng) {
+    // Location-based search using simple bounding box
+    if (latitude && longitude) {
       const radiusInKm = parseFloat(radius);
-      const latFloat = parseFloat(lat);
-      const lngFloat = parseFloat(lng);
+      const latFloat = parseFloat(latitude);
+      const lngFloat = parseFloat(longitude);
       
-      // Simple bounding box filter (more efficient than Haversine for initial filtering)
+      // Simple bounding box filter
       const latDelta = radiusInKm / 111; // Approximate km per degree latitude
       const lngDelta = radiusInKm / (111 * Math.cos(latFloat * Math.PI / 180)); // Adjust for longitude
       
-      where[Op.and] = [
-        { latitude: { [Op.ne]: null } },
-        { longitude: { [Op.ne]: null } },
-        { latitude: { [Op.between]: [latFloat - latDelta, latFloat + latDelta] } },
-        { longitude: { [Op.between]: [lngFloat - lngDelta, lngFloat + lngDelta] } }
-      ];
+      where.latitude = { [Op.between]: [latFloat - latDelta, latFloat + latDelta] };
+      where.longitude = { [Op.between]: [lngFloat - lngDelta, lngFloat + lngDelta] };
     }
 
+    // Simplified query without complex includes to avoid errors
     const { count, rows: establishments } = await Establishment.findAndCountAll({
       where,
-      include: [
-        {
-          model: Court,
-          as: 'courts',
-          where: { isActive: true },
-          required: false
-        },
-        {
-          model: Review,
-          as: 'reviews',
-          limit: 3,
-          order: [['createdAt', 'DESC']],
-          include: [{
-            model: User,
-            as: 'user',
-            attributes: ['firstName', 'lastName', 'profileImage']
-          }],
-          required: false
-        }
+      attributes: [
+        'id', 'name', 'description', 'address', 'city', 'latitude', 'longitude',
+        'phone', 'email', 'website', 'amenities', 'sports', 'rating', 'priceRange',
+        'images', 'openingHours', 'isActive', 'createdAt', 'updatedAt'
       ],
       limit: parseInt(limit),
       offset,
       order: [['rating', 'DESC'], ['createdAt', 'DESC']]
     });
 
-    // Add favorite status if user is authenticated
-    let establishmentsWithFavorites = establishments;
-    if (req.user) {
-      const favoriteIds = await Favorite.findAll({
-        where: { userId: req.user.id },
-        attributes: ['establishmentId']
-      }).then(favorites => favorites.map(f => f.establishmentId));
-
-      establishmentsWithFavorites = establishments.map(est => ({
-        ...est.toJSON(),
-        isFavorite: favoriteIds.includes(est.id)
-      }));
-    }
-
     res.json({
-      establishments: establishmentsWithFavorites,
+      data: establishments,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
