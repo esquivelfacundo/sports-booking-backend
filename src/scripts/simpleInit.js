@@ -5,6 +5,12 @@ async function simpleInit() {
   try {
     console.log('🔄 Inicializando base de datos simple...');
     
+    // Eliminar tablas existentes para recrearlas
+    await sequelize.query('DROP TABLE IF EXISTS courts CASCADE;');
+    await sequelize.query('DROP TABLE IF EXISTS establishments CASCADE;');
+    await sequelize.query('DROP TABLE IF EXISTS users CASCADE;');
+    console.log('✅ Tablas anteriores eliminadas');
+    
     // Crear tablas básicas manualmente
     await sequelize.query(`
       CREATE TABLE IF NOT EXISTS users (
