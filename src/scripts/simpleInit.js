@@ -13,7 +13,7 @@ async function simpleInit() {
         "lastName" VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        role VARCHAR(50) DEFAULT 'player',
+        "userType" VARCHAR(50) DEFAULT 'player',
         phone VARCHAR(50),
         verified BOOLEAN DEFAULT false,
         "createdAt" TIMESTAMP DEFAULT NOW(),
@@ -85,7 +85,7 @@ async function simpleInit() {
     const hashedPassword = await bcrypt.hash('password123', 12);
     
     await sequelize.query(`
-      INSERT INTO users ("firstName", "lastName", email, password, role, phone, verified) VALUES
+      INSERT INTO users ("firstName", "lastName", email, password, "userType", phone, verified) VALUES
       ('Juan', 'Pérez', 'juan@example.com', '${hashedPassword}', 'player', '+54 11 1234-5678', true),
       ('María', 'González', 'maria@example.com', '${hashedPassword}', 'player', '+54 11 2345-6789', true),
       ('Club', 'Central', 'admin@clubcentral.com', '${hashedPassword}', 'establishment', '+54 11 4567-8900', true)
