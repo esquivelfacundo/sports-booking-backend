@@ -29,8 +29,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
-    coordinates: {
-      type: DataTypes.GEOMETRY('POINT'),
+    latitude: {
+      type: DataTypes.DECIMAL(10, 8),
+      allowNull: true
+    },
+    longitude: {
+      type: DataTypes.DECIMAL(11, 8),
       allowNull: true
     },
     phone: {
@@ -124,8 +128,7 @@ module.exports = (sequelize, DataTypes) => {
         fields: ['rating']
       },
       {
-        type: 'GIST',
-        fields: ['coordinates']
+        fields: ['latitude', 'longitude']
       }
     ]
   });
