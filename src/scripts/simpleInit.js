@@ -9,13 +9,26 @@ async function simpleInit() {
     await sequelize.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        "firstName" VARCHAR(255) NOT NULL,
-        "lastName" VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        "userType" VARCHAR(50) DEFAULT 'player',
+        "firstName" VARCHAR(255) NOT NULL,
+        "lastName" VARCHAR(255) NOT NULL,
         phone VARCHAR(50),
-        verified BOOLEAN DEFAULT false,
+        "dateOfBirth" DATE,
+        "profileImage" VARCHAR(255),
+        city VARCHAR(255),
+        "isEmailVerified" BOOLEAN DEFAULT false,
+        "isPhoneVerified" BOOLEAN DEFAULT false,
+        "userType" VARCHAR(50) DEFAULT 'player',
+        bio TEXT,
+        "favoritesSports" JSONB DEFAULT '[]',
+        "skillLevel" VARCHAR(50) DEFAULT 'beginner',
+        location JSONB,
+        "isActive" BOOLEAN DEFAULT true,
+        "lastLoginAt" TIMESTAMP,
+        "emailVerificationToken" VARCHAR(255),
+        "passwordResetToken" VARCHAR(255),
+        "passwordResetExpires" TIMESTAMP,
         "createdAt" TIMESTAMP DEFAULT NOW(),
         "updatedAt" TIMESTAMP DEFAULT NOW()
       );
@@ -85,7 +98,7 @@ async function simpleInit() {
     const hashedPassword = await bcrypt.hash('password123', 12);
     
     await sequelize.query(`
-      INSERT INTO users ("firstName", "lastName", email, password, "userType", phone, verified) VALUES
+      INSERT INTO users ("firstName", "lastName", email, password, "userType", phone, "isEmailVerified") VALUES
       ('Juan', 'Pérez', 'juan@example.com', '${hashedPassword}', 'player', '+54 11 1234-5678', true),
       ('María', 'González', 'maria@example.com', '${hashedPassword}', 'player', '+54 11 2345-6789', true),
       ('Club', 'Central', 'admin@clubcentral.com', '${hashedPassword}', 'establishment', '+54 11 4567-8900', true)
