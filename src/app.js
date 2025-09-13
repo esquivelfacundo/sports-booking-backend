@@ -78,6 +78,7 @@ app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/favorites', require('./routes/favorites'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/tournaments', require('./routes/tournaments'));
+app.use('/api/admin', require('./routes/admin'));
 
 // 404 handler
 app.use('*', (req, res) => {
