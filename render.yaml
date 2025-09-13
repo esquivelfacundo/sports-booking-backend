@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: sports-booking-backend
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sports-booking-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: BCRYPT_ROUNDS
+        value: 12
+      - key: FRONTEND_URL
+        value: https://your-vercel-app.vercel.app
+      - key: FRONTEND_PROD_URL
+        value: https://your-vercel-app.vercel.app
+
+databases:
+  - name: sports-booking-db
+    databaseName: sports_booking_db
+    user: sports_booking_user
+    plan: starter

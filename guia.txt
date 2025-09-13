@@ -1,0 +1,539 @@
+GUÍA COMPLETA PARA BACKEND - PLATAFORMA DE RESERVAS DEPORTIVAS
+================================================================
+
+ANÁLISIS EXHAUSTIVO DEL FRONTEND Y REQUERIMIENTOS DEL BACKEND
+============================================================
+
+1. ANÁLISIS DE FUNCIONALIDADES PRINCIPALES
+==========================================
+
+1.1 HOMEPAGE Y BÚSQUEDA
+-----------------------
+- Detección automática de ciudad usando geolocalización
+- Búsqueda de canchas por ubicación, deporte, fecha y horario
+- Mostrar estadísticas: 500+ canchas, 4.8 calificación, 50k+ usuarios
+- Mostrar partidos disponibles para unirse
+- Canchas destacadas con ratings y precios
+- Explorar por deporte (Fútbol 5, Paddle, Tenis, Básquet, Vóley, Hockey)
+- Ofertas especiales y promociones
+
+1.2 SISTEMA DE BÚSQUEDA Y FILTROS
+---------------------------------
+- Búsqueda por ubicación (integración con Google Places)
+- Filtros por deporte, precio, calificación, horarios
+- Vista de mapa interactivo con marcadores de canchas
+- Ordenamiento por relevancia, precio, calificación, reseñas
+- Paginación y carga de resultados
+
+1.3 SISTEMA DE RESERVAS
+-----------------------
+- Selección de fecha (próximos 7 días)
+- Selección de cancha específica dentro del complejo
+- Selección múltiple de horarios (slots de 1 hora)
+- Precios dinámicos por horario y duración
+- Opciones de pago: "Pagar todo" vs "Pagar tu parte" (split payment)
+- Confirmación de reserva con detalles completos
+
+1.4 SISTEMA DE AUTENTICACIÓN
+----------------------------
+- Login y registro de usuarios
+- Autenticación requerida para reservar
+- Contexto de autenticación global
+
+1.5 GESTIÓN DE ESTABLECIMIENTOS
+-------------------------------
+- Dashboard completo para administración
+- Gestión de reservas, finanzas, personal, canchas
+- Analytics y reportes
+- Sistema de notificaciones
+- Gestión de torneos
+- Configuración del establecimiento
+
+1.6 FUNCIONALIDADES SOCIALES
+----------------------------
+- Sistema de partidos disponibles para unirse
+- Perfiles de jugadores
+- Sistema de amigos
+- Calificaciones y reseñas
+- Equipos y torneos
+
+2. ENTIDADES Y MODELOS DE DATOS REQUERIDOS
+==========================================
+
+2.1 USUARIOS (Users)
+-------------------
+- id: UUID (primary key)
+- email: string (unique)
+- password: string (hashed)
+- firstName: string
+- lastName: string
+- phone: string
+- dateOfBirth: date
+- profileImage: string (URL)
+- city: string
+- isEmailVerified: boolean
+- isPhoneVerified: boolean
+- userType: enum ['player', 'establishment', 'admin']
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.2 ESTABLECIMIENTOS (Establishments)
+------------------------------------
+- id: UUID (primary key)
+- userId: UUID (foreign key to Users)
+- name: string
+- description: text
+- address: string
+- city: string
+- coordinates: point (lat, lng)
+- phone: string
+- email: string
+- website: string
+- logo: string (URL)
+- images: array of strings (URLs)
+- amenities: array of strings
+- rules: array of strings
+- openingHours: JSON (horarios por día)
+- isActive: boolean
+- isVerified: boolean
+- rating: decimal (calculated)
+- totalReviews: integer (calculated)
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.3 CANCHAS (Courts)
+-------------------
+- id: UUID (primary key)
+- establishmentId: UUID (foreign key)
+- name: string
+- sport: enum ['futbol5', 'paddle', 'tenis', 'basquet', 'voley', 'hockey']
+- surface: string
+- type: enum ['indoor', 'outdoor', 'covered']
+- maxPlayers: integer
+- pricePerHour: decimal
+- isActive: boolean
+- images: array of strings (URLs)
+- amenities: array of strings
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.4 HORARIOS DISPONIBLES (TimeSlots)
+------------------------------------
+- id: UUID (primary key)
+- courtId: UUID (foreign key)
+- date: date
+- startTime: time
+- endTime: time
+- price: decimal
+- isAvailable: boolean
+- isRecurring: boolean (para horarios que se repiten)
+- recurringPattern: JSON (días de la semana, etc.)
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.5 RESERVAS (Bookings)
+----------------------
+- id: UUID (primary key)
+- userId: UUID (foreign key)
+- courtId: UUID (foreign key)
+- establishmentId: UUID (foreign key)
+- date: date
+- startTime: time
+- endTime: time
+- totalHours: integer
+- pricePerHour: decimal
+- totalAmount: decimal
+- paymentType: enum ['full', 'split']
+- paymentStatus: enum ['pending', 'paid', 'partial', 'refunded', 'cancelled']
+- bookingStatus: enum ['confirmed', 'cancelled', 'completed', 'no_show']
+- specialRequests: text
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.6 PAGOS (Payments)
+-------------------
+- id: UUID (primary key)
+- bookingId: UUID (foreign key)
+- userId: UUID (foreign key)
+- amount: decimal
+- paymentMethod: enum ['credit_card', 'debit_card', 'mercadopago', 'transfer']
+- paymentStatus: enum ['pending', 'completed', 'failed', 'refunded']
+- transactionId: string (external payment provider)
+- paymentDate: timestamp
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.7 PAGOS DIVIDIDOS (SplitPayments)
+----------------------------------
+- id: UUID (primary key)
+- bookingId: UUID (foreign key)
+- organizerId: UUID (foreign key to Users)
+- totalAmount: decimal
+- amountPerPlayer: decimal
+- maxPlayers: integer
+- currentPlayers: integer
+- deadline: timestamp
+- status: enum ['pending', 'completed', 'expired', 'cancelled']
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.8 PARTICIPANTES DE PAGO DIVIDIDO (SplitPaymentParticipants)
+------------------------------------------------------------
+- id: UUID (primary key)
+- splitPaymentId: UUID (foreign key)
+- userId: UUID (foreign key)
+- amount: decimal
+- paymentStatus: enum ['pending', 'paid', 'declined']
+- paidAt: timestamp
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.9 PARTIDOS DISPONIBLES (AvailableMatches)
+------------------------------------------
+- id: UUID (primary key)
+- organizerId: UUID (foreign key to Users)
+- courtId: UUID (foreign key)
+- establishmentId: UUID (foreign key)
+- sport: enum
+- date: date
+- time: time
+- duration: integer (minutes)
+- maxPlayers: integer
+- currentPlayers: integer
+- level: enum ['beginner', 'intermediate', 'advanced', 'mixed']
+- pricePerPlayer: decimal
+- description: text
+- isPrivate: boolean
+- status: enum ['open', 'full', 'cancelled', 'completed']
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.10 PARTICIPANTES DE PARTIDOS (MatchParticipants)
+-------------------------------------------------
+- id: UUID (primary key)
+- matchId: UUID (foreign key)
+- userId: UUID (foreign key)
+- joinedAt: timestamp
+- status: enum ['confirmed', 'cancelled', 'no_show']
+
+2.11 RESEÑAS (Reviews)
+---------------------
+- id: UUID (primary key)
+- userId: UUID (foreign key)
+- establishmentId: UUID (foreign key)
+- courtId: UUID (foreign key, nullable)
+- bookingId: UUID (foreign key, nullable)
+- rating: integer (1-5)
+- comment: text
+- images: array of strings (URLs)
+- isVerified: boolean (si la reseña es de una reserva confirmada)
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.12 FAVORITOS (Favorites)
+--------------------------
+- id: UUID (primary key)
+- userId: UUID (foreign key)
+- establishmentId: UUID (foreign key)
+- createdAt: timestamp
+
+2.13 NOTIFICACIONES (Notifications)
+----------------------------------
+- id: UUID (primary key)
+- userId: UUID (foreign key)
+- type: enum ['booking_confirmed', 'payment_received', 'match_invitation', 'review_request', 'system']
+- title: string
+- message: text
+- data: JSON (datos adicionales)
+- isRead: boolean
+- createdAt: timestamp
+- updatedAt: timestamp
+
+2.14 TORNEOS (Tournaments)
+-------------------------
+- id: UUID (primary key)
+- establishmentId: UUID (foreign key)
+- organizerId: UUID (foreign key)
+- name: string
+- description: text
+- sport: enum
+- startDate: date
+- endDate: date
+- maxTeams: integer
+- currentTeams: integer
+- entryFee: decimal
+- prizePool: decimal
+- status: enum ['upcoming', 'active', 'completed', 'cancelled']
+- rules: text
+- createdAt: timestamp
+- updatedAt: timestamp
+
+3. ENDPOINTS DE API REQUERIDOS
+==============================
+
+3.1 AUTENTICACIÓN
+-----------------
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/logout
+POST /api/auth/refresh
+POST /api/auth/forgot-password
+POST /api/auth/reset-password
+GET /api/auth/verify-email/:token
+POST /api/auth/resend-verification
+
+3.2 USUARIOS
+------------
+GET /api/users/profile
+PUT /api/users/profile
+POST /api/users/upload-avatar
+GET /api/users/:id
+PUT /api/users/password
+DELETE /api/users/account
+
+3.3 ESTABLECIMIENTOS
+--------------------
+GET /api/establishments
+GET /api/establishments/:id
+POST /api/establishments (crear establecimiento)
+PUT /api/establishments/:id
+DELETE /api/establishments/:id
+GET /api/establishments/search
+GET /api/establishments/:id/courts
+GET /api/establishments/:id/reviews
+GET /api/establishments/:id/availability
+POST /api/establishments/:id/reviews
+
+3.4 BÚSQUEDA Y FILTROS
+----------------------
+GET /api/search/facilities
+GET /api/search/courts
+GET /api/search/matches
+POST /api/search/advanced
+GET /api/filters/sports
+GET /api/filters/cities
+GET /api/filters/price-ranges
+
+3.5 CANCHAS
+-----------
+GET /api/courts
+GET /api/courts/:id
+POST /api/courts (para establecimientos)
+PUT /api/courts/:id
+DELETE /api/courts/:id
+GET /api/courts/:id/availability
+GET /api/courts/:id/timeslots
+
+3.6 RESERVAS
+------------
+GET /api/bookings (mis reservas)
+GET /api/bookings/:id
+POST /api/bookings
+PUT /api/bookings/:id
+DELETE /api/bookings/:id (cancelar)
+GET /api/bookings/:id/payment-status
+POST /api/bookings/:id/confirm-payment
+
+3.7 PAGOS
+---------
+POST /api/payments/create-intent
+POST /api/payments/confirm
+GET /api/payments/:id/status
+POST /api/payments/refund
+GET /api/payments/methods
+
+3.8 PAGOS DIVIDIDOS
+------------------
+POST /api/split-payments/create
+GET /api/split-payments/:id
+POST /api/split-payments/:id/join
+POST /api/split-payments/:id/pay
+GET /api/split-payments/my-invitations
+
+3.9 PARTIDOS DISPONIBLES
+------------------------
+GET /api/matches/available
+GET /api/matches/:id
+POST /api/matches (crear partido)
+PUT /api/matches/:id
+DELETE /api/matches/:id
+POST /api/matches/:id/join
+DELETE /api/matches/:id/leave
+GET /api/matches/my-matches
+
+3.10 DASHBOARD DE ESTABLECIMIENTOS
+----------------------------------
+GET /api/dashboard/stats
+GET /api/dashboard/bookings
+GET /api/dashboard/revenue
+GET /api/dashboard/analytics
+GET /api/dashboard/notifications
+PUT /api/dashboard/settings
+
+3.11 RESEÑAS Y CALIFICACIONES
+----------------------------
+GET /api/reviews/establishment/:id
+POST /api/reviews
+PUT /api/reviews/:id
+DELETE /api/reviews/:id
+GET /api/reviews/my-reviews
+
+3.12 FAVORITOS
+--------------
+GET /api/favorites
+POST /api/favorites
+DELETE /api/favorites/:establishmentId
+
+3.13 NOTIFICACIONES
+-------------------
+GET /api/notifications
+PUT /api/notifications/:id/read
+PUT /api/notifications/mark-all-read
+DELETE /api/notifications/:id
+
+3.14 TORNEOS
+------------
+GET /api/tournaments
+GET /api/tournaments/:id
+POST /api/tournaments
+PUT /api/tournaments/:id
+DELETE /api/tournaments/:id
+POST /api/tournaments/:id/register
+GET /api/tournaments/my-tournaments
+
+4. INTEGRACIONES EXTERNAS REQUERIDAS
+====================================
+
+4.1 PAGOS
+---------
+- MercadoPago API (Argentina)
+- Stripe (internacional)
+- PayPal (opcional)
+
+4.2 MAPAS Y GEOLOCALIZACIÓN
+--------------------------
+- Google Maps API
+- Google Places API
+- Geocoding API
+
+4.3 NOTIFICACIONES
+------------------
+- Firebase Cloud Messaging (push notifications)
+- SendGrid o similar (email)
+- Twilio (SMS, opcional)
+
+4.4 ALMACENAMIENTO DE ARCHIVOS
+-----------------------------
+- AWS S3 o Cloudinary (imágenes)
+- CDN para optimización
+
+5. CONSIDERACIONES TÉCNICAS
+===========================
+
+5.1 ARQUITECTURA
+----------------
+- API REST con Node.js + Express
+- Base de datos PostgreSQL
+- Redis para cache y sesiones
+- JWT para autenticación
+- Middleware de validación (Joi o Yup)
+- Rate limiting
+- CORS configurado para Vercel
+
+5.2 SEGURIDAD
+-------------
+- Hashing de passwords con bcrypt
+- Validación de inputs
+- Sanitización de datos
+- Rate limiting por IP
+- Logs de seguridad
+- Variables de entorno para secrets
+
+5.3 PERFORMANCE
+---------------
+- Indexación de base de datos
+- Cache con Redis
+- Paginación en todas las listas
+- Compresión gzip
+- Optimización de queries
+
+5.4 DEPLOY EN RENDER
+--------------------
+- Dockerfile para containerización
+- Variables de entorno
+- Health checks
+- Auto-deploy desde GitHub
+- Base de datos PostgreSQL en Render
+
+5.5 CONEXIÓN CON VERCEL
+-----------------------
+- CORS configurado para dominio de Vercel
+- Variables de entorno en Vercel apuntando a Render
+- API base URL configurable
+
+6. ESTRUCTURA DE CARPETAS PROPUESTA
+===================================
+
+backend/
+├── src/
+│   ├── controllers/
+│   ├── models/
+│   ├── routes/
+│   ├── middleware/
+│   ├── services/
+│   ├── utils/
+│   ├── config/
+│   └── app.js
+├── tests/
+├── docs/
+├── package.json
+├── Dockerfile
+├── .env.example
+└── README.md
+
+7. PRIORIDADES DE IMPLEMENTACIÓN
+================================
+
+FASE 1 (MVP):
+- Autenticación básica
+- CRUD de establecimientos y canchas
+- Sistema de reservas básico
+- Búsqueda simple
+- Pagos con MercadoPago
+
+FASE 2:
+- Sistema de partidos disponibles
+- Pagos divididos
+- Reseñas y calificaciones
+- Dashboard de establecimientos
+
+FASE 3:
+- Torneos
+- Notificaciones push
+- Analytics avanzados
+- Optimizaciones de performance
+
+8. DATOS DE PRUEBA NECESARIOS
+=============================
+
+- 50+ establecimientos de ejemplo
+- 200+ canchas distribuidas
+- Horarios disponibles para próximos 30 días
+- Usuarios de prueba (jugadores y establecimientos)
+- Reservas de ejemplo
+- Reseñas y calificaciones
+- Partidos disponibles
+
+NOTAS IMPORTANTES:
+==================
+
+1. El frontend ya está usando datos mock, por lo que el backend debe replicar exactamente estas estructuras
+2. Las coordenadas están en formato [lat, lng] 
+3. Los precios están en pesos argentinos
+4. Los horarios están en formato 24h (HH:MM)
+5. El sistema debe soportar múltiples deportes desde el inicio
+6. La geolocalización debe funcionar para Argentina principalmente
+7. El sistema de pagos divididos es una funcionalidad clave diferenciadora
+8. El dashboard de establecimientos debe ser muy completo desde el inicio
+
+Esta guía servirá como base para implementar un backend robusto que soporte todas las funcionalidades del frontend existente.
