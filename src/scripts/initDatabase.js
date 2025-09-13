@@ -6,8 +6,8 @@ async function initializeDatabase() {
   try {
     console.log('🔄 Inicializando base de datos...');
     
-    // Sincronizar modelos (crear tablas)
-    await sequelize.sync({ force: false });
+    // Sincronizar modelos (crear tablas) - force: true para recrear tablas
+    await sequelize.sync({ force: true });
     console.log('✅ Tablas sincronizadas');
 
     // Verificar si ya hay datos
