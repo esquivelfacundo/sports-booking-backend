@@ -19,7 +19,11 @@ const corsOptions = {
   origin: [
     process.env.FRONTEND_URL || 'http://localhost:3000',
     process.env.FRONTEND_PROD_URL || 'https://your-vercel-app.vercel.app',
-    'http://localhost:4555' // Development frontend port
+    'http://localhost:4555', // Development frontend port
+    'https://www.miscanchas.com',
+    'https://miscanchas.com',
+    'https://sports-booking-platform-two.vercel.app',
+    'https://sports-booking-platform-git-main-esquivelfacundos-projects.vercel.app'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
