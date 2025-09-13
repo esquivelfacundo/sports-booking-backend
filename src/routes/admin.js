@@ -2,6 +2,7 @@ const express = require('express');
 const { initializeDatabase } = require('../scripts/initDatabase');
 const { simpleInit } = require('../scripts/simpleInit');
 const { robustInit } = require('../scripts/robustInit');
+const { cleanInit } = require('../scripts/cleanInit');
 const router = express.Router();
 
 // Endpoint para inicializar la base de datos
@@ -19,7 +20,7 @@ router.post('/init-database', async (req, res) => {
     }
 
     console.log('🔄 Iniciando inicialización de base de datos...');
-    const result = await robustInit();
+    const result = await cleanInit();
     
     res.json({ 
       success: true,
