@@ -1,5 +1,5 @@
 const { Establishment, Court, Review, User, Favorite } = require('../models');
-const { Op } = require('sequelize');
+const { Op, sequelize } = require('sequelize');
 
 const createEstablishment = async (req, res) => {
   try {
@@ -25,10 +25,8 @@ const createEstablishment = async (req, res) => {
       description,
       address,
       city,
-      coordinates: coordinates ? {
-        type: 'Point',
-        coordinates: [coordinates.lng, coordinates.lat]
-      } : null,
+      latitude: coordinates ? coordinates.lat : null,
+      longitude: coordinates ? coordinates.lng : null,
       phone,
       email,
       website,
@@ -99,23 +97,22 @@ const getEstablishments = async (req, res) => {
       where.priceRange = priceRange;
     }
 
-    // Location-based search
+    // Location-based search using Haversine formula
     if (lat && lng) {
-      const radiusInMeters = radius * 1000;
-      where.coordinates = {
-        [Op.and]: [
-          { [Op.ne]: null },
-          sequelize.where(
-            sequelize.fn(
-              'ST_DWithin',
-              sequelize.col('coordinates'),
-              sequelize.fn('ST_SetSRID', sequelize.fn('ST_Point', lng, lat), 4326),
-              radiusInMeters
-            ),
-            true
-          )
-        ]
-      };
+      const radiusInKm = parseFloat(radius);
+      const latFloat = parseFloat(lat);
+      const lngFloat = parseFloat(lng);
+      
+      // Simple bounding box filter (more efficient than Haversine for initial filtering)
+      const latDelta = radiusInKm / 111; // Approximate km per degree latitude
+      const lngDelta = radiusInKm / (111 * Math.cos(latFloat * Math.PI / 180)); // Adjust for longitude
+      
+      where[Op.and] = [
+        { latitude: { [Op.ne]: null } },
+        { longitude: { [Op.ne]: null } },
+        { latitude: { [Op.between]: [latFloat - latDelta, latFloat + latDelta] } },
+        { longitude: { [Op.between]: [lngFloat - lngDelta, lngFloat + lngDelta] } }
+      ];
     }
 
     const { count, rows: establishments } = await Establishment.findAndCountAll({
