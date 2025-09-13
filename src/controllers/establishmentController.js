@@ -1,5 +1,6 @@
 const { Establishment, Court, Review, User, Favorite } = require('../models');
-const { Op, sequelize } = require('sequelize');
+const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
 
 const createEstablishment = async (req, res) => {
   try {
