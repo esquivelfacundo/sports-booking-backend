@@ -61,6 +61,55 @@ const createCourt = async (req, res) => {
   }
 };
 
+// Get all courts (general listing)
+const getAllCourts = async (req, res) => {
+  try {
+    const { sport, isIndoor, surface, establishmentId } = req.query;
+
+    const where = { isActive: true };
+
+    if (establishmentId) {
+      where.establishmentId = establishmentId;
+    }
+
+    if (sport) {
+      where.sport = sport;
+    }
+
+    if (isIndoor !== undefined) {
+      where.isIndoor = isIndoor === 'true';
+    }
+
+    if (surface) {
+      where.surface = surface;
+    }
+
+    const courts = await Court.findAll({
+      where,
+      include: [
+        {
+          model: Establishment,
+          as: 'establishment',
+          attributes: ['id', 'name', 'address', 'city', 'images']
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    res.json({ 
+      success: true,
+      data: courts 
+    });
+
+  } catch (error) {
+    console.error('Get all courts error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch courts',
+      message: 'An error occurred while fetching courts'
+    });
+  }
+};
+
 const getCourts = async (req, res) => {
   try {
     const { establishmentId } = req.params;
@@ -378,6 +427,7 @@ const minutesToTime = (minutes) => {
 
 module.exports = {
   createCourt,
+  getAllCourts,
   getCourts,
   getCourtById,
   updateCourt,

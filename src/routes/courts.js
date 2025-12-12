@@ -3,6 +3,7 @@ const { body, query, validationResult } = require('express-validator');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const {
   createCourt,
+  getAllCourts,
   getCourts,
   getCourtById,
   updateCourt,
@@ -129,6 +130,7 @@ const availabilityValidation = [
 ];
 
 // Public routes
+router.get('/', getAllCourts);
 router.get('/establishment/:establishmentId', getCourts);
 router.get('/:id', getCourtById);
 router.get('/:id/availability', availabilityValidation, handleValidationErrors, getCourtAvailability);

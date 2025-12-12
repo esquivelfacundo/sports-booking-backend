@@ -432,9 +432,10 @@ const getEstablishmentBookings = async (req, res) => {
     const { page = 1, limit = 20, status, date } = req.query;
     const offset = (page - 1) * limit;
 
-    // Verify establishment ownership
+    // Verify establishment ownership (admins can access any establishment)
+    const isAdmin = req.user.userType === 'admin';
     const establishment = await Establishment.findOne({
-      where: { id: establishmentId, userId }
+      where: isAdmin ? { id: establishmentId } : { id: establishmentId, userId }
     });
 
     if (!establishment) {
@@ -504,3 +505,4 @@ module.exports = {
   cancelBooking,
   getEstablishmentBookings
 };
+
