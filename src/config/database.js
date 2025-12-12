@@ -1,11 +1,25 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
+// Get DATABASE_URL - Railway may use different variable names
+const databaseUrl = process.env.DATABASE_URL || 
+                    process.env.DATABASE_PRIVATE_URL || 
+                    process.env.POSTGRES_URL ||
+                    (process.env.PGHOST ? `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}:${process.env.PGPORT}/${process.env.PGDATABASE}` : null);
+
+// Debug: Log database connection info (without password)
+if (databaseUrl) {
+  const sanitizedUrl = databaseUrl.replace(/:[^:@]+@/, ':****@');
+  console.log('🔗 Using DATABASE_URL:', sanitizedUrl);
+} else {
+  console.log('⚠️ No DATABASE_URL found, using individual DB_* variables');
+}
+
 // Determine if SSL should be used (Railway, Render, Supabase, etc.)
-const useSSL = process.env.DATABASE_URL?.includes('railway') || 
-               process.env.DATABASE_URL?.includes('render') ||
-               process.env.DATABASE_URL?.includes('supabase') ||
-               process.env.DATABASE_URL?.includes('neon') ||
+const useSSL = databaseUrl?.includes('railway') || 
+               databaseUrl?.includes('render') ||
+               databaseUrl?.includes('supabase') ||
+               databaseUrl?.includes('neon') ||
                process.env.NODE_ENV === 'production';
 
 const sslConfig = useSSL ? {
@@ -13,8 +27,8 @@ const sslConfig = useSSL ? {
   rejectUnauthorized: false
 } : false;
 
-const sequelize = process.env.DATABASE_URL 
-  ? new Sequelize(process.env.DATABASE_URL, {
+const sequelize = databaseUrl 
+  ? new Sequelize(databaseUrl, {
       logging: process.env.NODE_ENV === 'development' ? console.log : false,
       pool: {
         max: 10,
