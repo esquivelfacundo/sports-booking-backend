@@ -10,7 +10,8 @@
     "migrate": "sequelize-cli db:migrate",
     "seed": "sequelize-cli db:seed:all",
     "db:init": "node src/scripts/initDatabase.js",
-    "db:sync": "node -e \"require('./src/models').sequelize.sync({ alter: true }).then(() => console.log('✅ DB synced')).catch(console.error).finally(() => process.exit())\""
+    "db:sync": "node -e \"require('./src/models').sequelize.sync({ alter: true }).then(() => console.log('✅ DB synced')).catch(console.error).finally(() => process.exit())\"",
+    "db:seed": "node src/scripts/seedTestData.js"
   },
   "keywords": ["sports", "booking", "api", "nodejs", "express"],
   "author": "Sports Booking Platform",
