@@ -16,6 +16,7 @@ const Review = require('./Review')(sequelize, DataTypes);
 const Favorite = require('./Favorite')(sequelize, DataTypes);
 const Notification = require('./Notification')(sequelize, DataTypes);
 const Tournament = require('./Tournament')(sequelize, DataTypes);
+const TournamentParticipant = require('./TournamentParticipant')(sequelize, DataTypes);
 
 // Define associations
 const defineAssociations = () => {
@@ -97,6 +98,12 @@ const defineAssociations = () => {
   // Tournament associations
   Tournament.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
   Tournament.belongsTo(User, { foreignKey: 'organizerId', as: 'organizer' });
+  Tournament.hasMany(TournamentParticipant, { foreignKey: 'tournamentId', as: 'participants' });
+
+  // TournamentParticipant associations
+  TournamentParticipant.belongsTo(Tournament, { foreignKey: 'tournamentId', as: 'tournament' });
+  TournamentParticipant.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  User.hasMany(TournamentParticipant, { foreignKey: 'userId', as: 'tournamentParticipations' });
 };
 
 // Initialize associations
@@ -117,5 +124,6 @@ module.exports = {
   Review,
   Favorite,
   Notification,
-  Tournament
+  Tournament,
+  TournamentParticipant
 };

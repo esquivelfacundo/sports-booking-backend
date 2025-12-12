@@ -1,0 +1,511 @@
+const { User, Establishment, Court, Booking, Payment, Review } = require('../models');
+const { Op } = require('sequelize');
+
+// ==================== ESTABLISHMENTS ====================
+
+const getAllEstablishments = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status, 
+      city, 
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const offset = (page - 1) * limit;
+    
+    // Build where clause
+    const where = {};
+    
+    if (status) {
+      where.registrationStatus = status;
+    }
+    
+    if (city) {
+      where.city = { [Op.iLike]: `%${city}%` };
+    }
+    
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { address: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const { count, rows: establishments } = await Establishment.findAndCountAll({
+      where,
+      include: [
+        {
+          model: User,
+          as: 'owner',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone']
+        },
+        {
+          model: Court,
+          as: 'courts',
+          attributes: ['id', 'name', 'sport', 'pricePerHour']
+        }
+      ],
+      order: [[sortBy, sortOrder]],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    // Transform data for frontend
+    const transformedEstablishments = establishments.map(est => ({
+      id: est.id,
+      name: est.name,
+      city: est.city,
+      email: est.email,
+      registrationStatus: est.registrationStatus,
+      createdAt: est.createdAt,
+      address: est.address,
+      phone: est.phone,
+      description: est.description,
+      amenities: est.amenities || [],
+      sports: est.sports || [],
+      rating: est.rating || 0,
+      reviewCount: est.reviewCount || 0,
+      isActive: est.isActive,
+      owner: est.owner,
+      courtsCount: est.courts?.length || 0
+    }));
+
+    res.json({
+      success: true,
+      data: transformedEstablishments,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: count,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching establishments:', error);
+    res.status(500).json({
+      error: 'Error fetching establishments',
+      message: error.message
+    });
+  }
+};
+
+const approveEstablishment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Establishment not found'
+      });
+    }
+
+    await establishment.update({
+      registrationStatus: 'approved',
+      isActive: true,
+      approvedAt: new Date(),
+      approvedBy: req.user.id
+    });
+
+    res.json({
+      success: true,
+      message: 'Establishment approved successfully',
+      data: establishment
+    });
+  } catch (error) {
+    console.error('Error approving establishment:', error);
+    res.status(500).json({
+      error: 'Error approving establishment',
+      message: error.message
+    });
+  }
+};
+
+const rejectEstablishment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Establishment not found'
+      });
+    }
+
+    await establishment.update({
+      registrationStatus: 'rejected',
+      isActive: false,
+      rejectionReason: reason,
+      rejectedAt: new Date(),
+      rejectedBy: req.user.id
+    });
+
+    res.json({
+      success: true,
+      message: 'Establishment rejected',
+      data: establishment
+    });
+  } catch (error) {
+    console.error('Error rejecting establishment:', error);
+    res.status(500).json({
+      error: 'Error rejecting establishment',
+      message: error.message
+    });
+  }
+};
+
+const deleteEstablishmentAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Establishment not found'
+      });
+    }
+
+    // Soft delete - just mark as inactive and deleted
+    await establishment.update({
+      isActive: false,
+      deletedAt: new Date(),
+      deletedBy: req.user.id
+    });
+
+    res.json({
+      success: true,
+      message: 'Establishment deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting establishment:', error);
+    res.status(500).json({
+      error: 'Error deleting establishment',
+      message: error.message
+    });
+  }
+};
+
+// ==================== USERS ====================
+
+const getAllUsers = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      role,
+      isActive,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const offset = (page - 1) * limit;
+    
+    // Build where clause
+    const where = {};
+    
+    if (role) {
+      where.userType = role;
+    }
+    
+    if (isActive !== undefined) {
+      where.isActive = isActive === 'true';
+    }
+    
+    if (search) {
+      where[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const { count, rows: users } = await User.findAndCountAll({
+      where,
+      attributes: { exclude: ['password', 'refreshToken'] },
+      order: [[sortBy, sortOrder]],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    // Transform data for frontend
+    const transformedUsers = users.map(user => ({
+      id: user.id,
+      name: `${user.firstName} ${user.lastName}`,
+      email: user.email,
+      createdAt: user.createdAt,
+      isActive: user.isActive,
+      role: user.userType,
+      phone: user.phone,
+      city: user.city
+    }));
+
+    res.json({
+      success: true,
+      data: transformedUsers,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: count,
+        pages: Math.ceil(count / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({
+      error: 'Error fetching users',
+      message: error.message
+    });
+  }
+};
+
+const suspendUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const user = await User.findByPk(id);
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'User not found'
+      });
+    }
+
+    // Prevent suspending admins
+    if (user.userType === 'admin' || user.userType === 'superadmin') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Cannot suspend admin users'
+      });
+    }
+
+    await user.update({
+      isActive: false,
+      suspendedAt: new Date(),
+      suspendedBy: req.user.id,
+      suspensionReason: reason
+    });
+
+    res.json({
+      success: true,
+      message: 'User suspended successfully'
+    });
+  } catch (error) {
+    console.error('Error suspending user:', error);
+    res.status(500).json({
+      error: 'Error suspending user',
+      message: error.message
+    });
+  }
+};
+
+const activateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await User.findByPk(id);
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'User not found'
+      });
+    }
+
+    await user.update({
+      isActive: true,
+      suspendedAt: null,
+      suspendedBy: null,
+      suspensionReason: null
+    });
+
+    res.json({
+      success: true,
+      message: 'User activated successfully'
+    });
+  } catch (error) {
+    console.error('Error activating user:', error);
+    res.status(500).json({
+      error: 'Error activating user',
+      message: error.message
+    });
+  }
+};
+
+const deleteUserAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await User.findByPk(id);
+    
+    if (!user) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'User not found'
+      });
+    }
+
+    // Prevent deleting admins
+    if (user.userType === 'admin' || user.userType === 'superadmin') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Cannot delete admin users'
+      });
+    }
+
+    // Soft delete
+    await user.update({
+      isActive: false,
+      deletedAt: new Date(),
+      deletedBy: req.user.id
+    });
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({
+      error: 'Error deleting user',
+      message: error.message
+    });
+  }
+};
+
+// ==================== STATS ====================
+
+const getPlatformStats = async (req, res) => {
+  try {
+    // Get establishment stats
+    const totalEstablishments = await Establishment.count();
+    const approvedEstablishments = await Establishment.count({
+      where: { registrationStatus: 'approved' }
+    });
+    const pendingEstablishments = await Establishment.count({
+      where: { registrationStatus: 'pending' }
+    });
+    const rejectedEstablishments = await Establishment.count({
+      where: { registrationStatus: 'rejected' }
+    });
+
+    // Get user stats
+    const totalUsers = await User.count();
+    const activeUsers = await User.count({
+      where: { isActive: true }
+    });
+    const playerUsers = await User.count({
+      where: { userType: 'player' }
+    });
+    const establishmentUsers = await User.count({
+      where: { userType: 'establishment' }
+    });
+
+    // Get booking stats
+    const totalBookings = await Booking.count();
+    const confirmedBookings = await Booking.count({
+      where: { status: 'confirmed' }
+    });
+    const completedBookings = await Booking.count({
+      where: { status: 'completed' }
+    });
+    const cancelledBookings = await Booking.count({
+      where: { status: 'cancelled' }
+    });
+
+    // Get payment stats
+    const totalPayments = await Payment.count();
+    const completedPayments = await Payment.count({
+      where: { status: 'completed' }
+    });
+    
+    // Calculate total revenue
+    const revenueResult = await Payment.sum('amount', {
+      where: { status: 'completed' }
+    });
+    const totalRevenue = revenueResult || 0;
+
+    // Get court stats
+    const totalCourts = await Court.count();
+
+    // Get review stats
+    const totalReviews = await Review.count();
+
+    res.json({
+      success: true,
+      data: {
+        establishments: {
+          total: totalEstablishments,
+          approved: approvedEstablishments,
+          pending: pendingEstablishments,
+          rejected: rejectedEstablishments
+        },
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+          players: playerUsers,
+          establishments: establishmentUsers
+        },
+        bookings: {
+          total: totalBookings,
+          confirmed: confirmedBookings,
+          completed: completedBookings,
+          cancelled: cancelledBookings
+        },
+        payments: {
+          total: totalPayments,
+          completed: completedPayments,
+          totalRevenue: totalRevenue
+        },
+        courts: {
+          total: totalCourts
+        },
+        reviews: {
+          total: totalReviews
+        },
+        // Legacy format for frontend compatibility
+        totalEstablishments,
+        approvedEstablishments,
+        pendingEstablishments,
+        totalUsers,
+        totalReservations: totalBookings,
+        totalRevenue
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching platform stats:', error);
+    res.status(500).json({
+      error: 'Error fetching platform stats',
+      message: error.message
+    });
+  }
+};
+
+module.exports = {
+  // Establishments
+  getAllEstablishments,
+  approveEstablishment,
+  rejectEstablishment,
+  deleteEstablishmentAdmin,
+  // Users
+  getAllUsers,
+  suspendUser,
+  activateUser,
+  deleteUserAdmin,
+  // Stats
+  getPlatformStats
+};

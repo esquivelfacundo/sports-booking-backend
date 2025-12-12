@@ -3,6 +3,19 @@ const { initializeDatabase } = require('../scripts/initDatabase');
 const { simpleInit } = require('../scripts/simpleInit');
 const { robustInit } = require('../scripts/robustInit');
 const { cleanInit } = require('../scripts/cleanInit');
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const {
+  getAllEstablishments,
+  approveEstablishment,
+  rejectEstablishment,
+  deleteEstablishmentAdmin,
+  getAllUsers,
+  suspendUser,
+  activateUser,
+  deleteUserAdmin,
+  getPlatformStats
+} = require('../controllers/adminController');
+
 const router = express.Router();
 
 // Endpoint para inicializar la base de datos
@@ -61,5 +74,23 @@ router.get('/database-status', async (req, res) => {
     });
   }
 });
+
+// ==================== PROTECTED ADMIN ROUTES ====================
+// All routes below require authentication and admin role
+
+// Establishments management
+router.get('/establishments', authenticateToken, requireRole(['admin', 'superadmin']), getAllEstablishments);
+router.put('/establishments/:id/approve', authenticateToken, requireRole(['admin', 'superadmin']), approveEstablishment);
+router.put('/establishments/:id/reject', authenticateToken, requireRole(['admin', 'superadmin']), rejectEstablishment);
+router.delete('/establishments/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteEstablishmentAdmin);
+
+// Users management
+router.get('/users', authenticateToken, requireRole(['admin', 'superadmin']), getAllUsers);
+router.put('/users/:id/suspend', authenticateToken, requireRole(['admin', 'superadmin']), suspendUser);
+router.put('/users/:id/activate', authenticateToken, requireRole(['admin', 'superadmin']), activateUser);
+router.delete('/users/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteUserAdmin);
+
+// Platform statistics
+router.get('/stats', authenticateToken, requireRole(['admin', 'superadmin']), getPlatformStats);
 
 module.exports = router;

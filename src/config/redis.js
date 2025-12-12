@@ -4,9 +4,15 @@ require('dotenv').config();
 let client;
 
 const connectRedis = async () => {
+  // Skip Redis connection if no REDIS_URL is configured
+  if (!process.env.REDIS_URL) {
+    console.log('ℹ️  Redis not configured (optional) - skipping connection');
+    return null;
+  }
+
   try {
     client = redis.createClient({
-      url: process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`,
+      url: process.env.REDIS_URL,
       password: process.env.REDIS_PASSWORD || undefined,
     });
 
@@ -25,7 +31,7 @@ const connectRedis = async () => {
     await client.connect();
     return client;
   } catch (error) {
-    console.error('❌ Redis connection failed:', error);
+    console.error('❌ Redis connection failed (optional):', error.message);
     // Return null if Redis is not available (optional dependency)
     return null;
   }

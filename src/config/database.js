@@ -1,6 +1,18 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
+// Determine if SSL should be used (Railway, Render, Supabase, etc.)
+const useSSL = process.env.DATABASE_URL?.includes('railway') || 
+               process.env.DATABASE_URL?.includes('render') ||
+               process.env.DATABASE_URL?.includes('supabase') ||
+               process.env.DATABASE_URL?.includes('neon') ||
+               process.env.NODE_ENV === 'production';
+
+const sslConfig = useSSL ? {
+  require: true,
+  rejectUnauthorized: false
+} : false;
+
 const sequelize = process.env.DATABASE_URL 
   ? new Sequelize(process.env.DATABASE_URL, {
       logging: process.env.NODE_ENV === 'development' ? console.log : false,
@@ -11,10 +23,7 @@ const sequelize = process.env.DATABASE_URL
         idle: 10000,
       },
       dialectOptions: {
-        ssl: process.env.NODE_ENV === 'production' ? {
-          require: true,
-          rejectUnauthorized: false
-        } : false
+        ssl: sslConfig
       }
     })
   : new Sequelize(
@@ -33,10 +42,7 @@ const sequelize = process.env.DATABASE_URL
           idle: 10000,
         },
         dialectOptions: {
-          ssl: process.env.NODE_ENV === 'production' ? {
-            require: true,
-            rejectUnauthorized: false
-          } : false
+          ssl: false
         }
       }
     );

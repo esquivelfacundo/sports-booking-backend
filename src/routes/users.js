@@ -1,11 +1,39 @@
 const express = require('express');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const {
+  getUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
+  getUserBookings,
+  getUserFavorites,
+  getUserReviews
+} = require('../controllers/userController');
 
 const router = express.Router();
 
-// Placeholder routes - will be implemented later
-router.get('/', authenticateToken, (req, res) => {
-  res.json({ message: 'Users endpoint - to be implemented' });
-});
+// All routes require authentication
+router.use(authenticateToken);
+
+// Get all users (admin only)
+router.get('/', requireRole(['admin', 'superadmin']), getUsers);
+
+// Get user by ID
+router.get('/:id', getUserById);
+
+// Update user
+router.put('/:id', updateUser);
+
+// Delete user
+router.delete('/:id', deleteUser);
+
+// Get user's bookings
+router.get('/:id/bookings', getUserBookings);
+
+// Get user's favorites
+router.get('/:id/favorites', getUserFavorites);
+
+// Get user's reviews
+router.get('/:id/reviews', getUserReviews);
 
 module.exports = router;
