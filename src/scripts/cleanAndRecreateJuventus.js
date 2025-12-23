@@ -1,5 +1,6 @@
 const { sequelize } = require('../config/database');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 async function cleanAndRecreateJuventus() {
   console.log('🚀 Limpiando y recreando establecimiento Juventus...\n');
@@ -96,8 +97,13 @@ async function cleanAndRecreateJuventus() {
       console.log('  ✅ Establecimiento eliminado\n');
     }
     
-    // 3. Crear nuevo establecimiento
-    console.log('3️⃣ Creando nuevo establecimiento...');
+    // 3. Generar API Key
+    const apiKey = 'mc_' + crypto.randomBytes(32).toString('hex');
+    console.log('3️⃣ Generando API Key...');
+    console.log(`   API Key: ${apiKey}\n`);
+    
+    // 4. Crear nuevo establecimiento
+    console.log('4️⃣ Creando nuevo establecimiento...');
     const [estResult] = await sequelize.query(`
       INSERT INTO establishments (
         id, "userId", name, slug, description, address, city, phone, email,
@@ -107,6 +113,7 @@ async function cleanAndRecreateJuventus() {
         "depositPaymentDeadlineHours", "depositType", "depositPercentage", "depositFixedAmount",
         "requireDeposit", "allowFullPayment", "allowSameDayBooking",
         "minAdvanceBookingHours", "maxAdvanceBookingDays",
+        "apiKey",
         "createdAt", "updatedAt"
       ) VALUES (
         gen_random_uuid(),
@@ -139,6 +146,7 @@ async function cleanAndRecreateJuventus() {
         true,
         2,
         30,
+        '${apiKey}',
         NOW(),
         NOW()
       )
@@ -148,8 +156,8 @@ async function cleanAndRecreateJuventus() {
     const establishmentId = estResult[0].id;
     console.log(`✅ Establecimiento creado: ${establishmentId}\n`);
     
-    // 4. Crear canchas
-    console.log('4️⃣ Creando canchas...');
+    // 5. Crear canchas
+    console.log('5️⃣ Creando canchas...');
     
     const courts = [
       { name: 'Cancha #1', sport: 'futbol', surface: 'synthetic', isIndoor: true, capacity: 10, price: 25000, description: 'Cancha de fútbol 5 techada con iluminación LED' },
@@ -186,8 +194,8 @@ async function cleanAndRecreateJuventus() {
     }
     console.log('');
     
-    // 5. Crear amenity (Quincho)
-    console.log('5️⃣ Creando amenities...');
+    // 6. Crear amenity (Quincho)
+    console.log('6️⃣ Creando amenities...');
     await sequelize.query(`
       INSERT INTO amenities (
         id, "establishmentId", name, description, icon, "pricePerHour",
@@ -211,8 +219,8 @@ async function cleanAndRecreateJuventus() {
     `);
     console.log('  ✅ Quincho creado\n');
     
-    // 6. Crear staff
-    console.log('6️⃣ Creando personal del establecimiento...');
+    // 7. Crear staff
+    console.log('7️⃣ Creando personal del establecimiento...');
     
     const staffMembers = [
       {
@@ -295,8 +303,8 @@ async function cleanAndRecreateJuventus() {
     }
     console.log('');
     
-    // 7. Limpiar datos de testing de otros establecimientos
-    console.log('7️⃣ Limpiando datos de testing de otros establecimientos...');
+    // 8. Limpiar datos de testing de otros establecimientos
+    console.log('8️⃣ Limpiando datos de testing de otros establecimientos...');
     
     await sequelize.query(`
       DELETE FROM bookings 
@@ -339,6 +347,8 @@ async function cleanAndRecreateJuventus() {
     console.log(`   Canchas: 6 canchas de fútbol`);
     console.log(`   Amenities: 1 quincho`);
     console.log(`   Staff: 3 miembros (admin, gerente, recepcionista)`);
+    console.log('\n🔑 API Key para WhatsApp Bot:');
+    console.log(`   ${apiKey}`);
     console.log('\n📝 Credenciales del staff:');
     console.log('   Admin: admin@clubjuventus.com / Admin2024! (PIN: 1234)');
     console.log('   Gerente: gerente@clubjuventus.com / Gerente2024!');
