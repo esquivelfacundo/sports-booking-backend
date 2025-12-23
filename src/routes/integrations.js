@@ -45,12 +45,30 @@ async function getEstablishmentId(user) {
 }
 
 /**
+ * Middleware to check if user is admin/owner (not regular staff)
+ * Integrations should only be accessible by establishment owners or admin staff
+ */
+function requireAdminOrOwner(req, res, next) {
+  // Staff with non-admin role cannot access integrations
+  if (req.user.isStaff && req.user.staffRole !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permiso para acceder a las integraciones. Solo administradores pueden gestionar integraciones.'
+    });
+  }
+  next();
+}
+
+/**
  * GET /api/integrations
  * Get all integrations for the authenticated user's establishment
+ * Only accessible by establishment owners/admins, not regular staff
  */
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, requireAdminOrOwner, async (req, res) => {
   try {
     const establishmentId = await getEstablishmentId(req.user);
+    
+    console.log(`[Integrations] User ${req.user.email} (isStaff: ${req.user.isStaff}) requesting integrations for establishment: ${establishmentId}`);
     
     if (!establishmentId) {
       return res.status(400).json({
@@ -60,6 +78,8 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 
     const integrations = await integrationsService.findAll(establishmentId);
+    
+    console.log(`[Integrations] Found ${integrations.length} integrations for establishment ${establishmentId}`);
     
     res.json({
       success: true,
@@ -78,7 +98,7 @@ router.get('/', authenticateToken, async (req, res) => {
  * GET /api/integrations/:type
  * Get a specific integration by type
  */
-router.get('/:type', authenticateToken, async (req, res) => {
+router.get('/:type', authenticateToken, requireAdminOrOwner, async (req, res) => {
   try {
     const establishmentId = await getEstablishmentId(req.user);
     const { type } = req.params;
@@ -117,7 +137,7 @@ router.get('/:type', authenticateToken, async (req, res) => {
  * POST /api/integrations
  * Create or update an integration
  */
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, requireAdminOrOwner, async (req, res) => {
   try {
     const establishmentId = await getEstablishmentId(req.user);
     const userId = req.user.id || req.user.odId;
@@ -182,7 +202,7 @@ router.post('/', authenticateToken, async (req, res) => {
  * POST /api/integrations/:type/test
  * Test an integration's connection
  */
-router.post('/:type/test', authenticateToken, async (req, res) => {
+router.post('/:type/test', authenticateToken, requireAdminOrOwner, async (req, res) => {
   try {
     const establishmentId = await getEstablishmentId(req.user);
     const { type } = req.params;
@@ -221,7 +241,7 @@ router.post('/:type/test', authenticateToken, async (req, res) => {
  * PATCH /api/integrations/:type/toggle
  * Toggle an integration's active status
  */
-router.patch('/:type/toggle', authenticateToken, async (req, res) => {
+router.patch('/:type/toggle', authenticateToken, requireAdminOrOwner, async (req, res) => {
   try {
     const establishmentId = await getEstablishmentId(req.user);
     const userId = req.user.id || req.user.odId;
@@ -262,7 +282,7 @@ router.patch('/:type/toggle', authenticateToken, async (req, res) => {
  * DELETE /api/integrations/:type
  * Delete an integration
  */
-router.delete('/:type', authenticateToken, async (req, res) => {
+router.delete('/:type', authenticateToken, requireAdminOrOwner, async (req, res) => {
   try {
     const establishmentId = await getEstablishmentId(req.user);
     const { type } = req.params;
