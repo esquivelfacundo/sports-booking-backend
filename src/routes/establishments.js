@@ -197,6 +197,52 @@ router.get('/my/profile', authenticateToken, requireRole(['establishment', 'admi
   }
 });
 
+// Update establishment profile (including PIN)
+router.put('/my/profile', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
+  try {
+    const establishment = await Establishment.findOne({
+      where: { userId: req.user.id }
+    });
+    
+    if (!establishment) {
+      return res.status(404).json({ success: false, error: 'Establishment not found' });
+    }
+    
+    const { pin, currentPin } = req.body;
+    
+    // Update PIN if provided
+    if (pin !== undefined) {
+      if (pin === null || pin === '') {
+        await establishment.update({ pin: null });
+      } else if (/^[0-9]{4}$/.test(pin)) {
+        // If establishment already has a PIN, require currentPin to change it
+        if (establishment.pin && currentPin !== establishment.pin) {
+          return res.status(401).json({
+            success: false,
+            error: 'Invalid current PIN',
+            message: 'El PIN actual es incorrecto'
+          });
+        }
+        await establishment.update({ pin });
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid PIN format',
+          message: 'El PIN debe ser de 4 dígitos'
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Perfil actualizado correctamente'
+    });
+  } catch (error) {
+    console.error('Error updating establishment profile:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // API Key management for WhatsApp bot integration
 router.get('/:id/api-key', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
   try {
