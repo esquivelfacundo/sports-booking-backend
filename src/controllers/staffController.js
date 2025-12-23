@@ -465,11 +465,14 @@ const getMyProfile = async (req, res) => {
       });
     }
 
-    // Get the user's establishment
+    // Get the user's establishment (including PIN for owners)
     const establishment = await Establishment.findOne({
       where: { userId },
-      attributes: ['id', 'name', 'logo', 'slug']
+      attributes: ['id', 'name', 'logo', 'slug', 'pin']
     });
+
+    // For owners, PIN is stored in Establishment table, not User table
+    const establishmentPin = establishment?.pin;
 
     return res.json({
       success: true,
@@ -481,9 +484,14 @@ const getMyProfile = async (req, res) => {
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
-        pin: user.pin ? '****' : null,
-        hasPin: !!user.pin,
-        establishment
+        pin: establishmentPin ? '****' : null,
+        hasPin: !!establishmentPin,
+        establishment: establishment ? {
+          id: establishment.id,
+          name: establishment.name,
+          logo: establishment.logo,
+          slug: establishment.slug
+        } : null
       }
     });
   } catch (error) {
@@ -605,18 +613,24 @@ const updateMyProfile = async (req, res) => {
       });
     }
 
-    const updates = {};
+    // Get the user's establishment (for PIN management)
+    const establishment = await Establishment.findOne({
+      where: { userId }
+    });
+
+    const userUpdates = {};
+    const establishmentUpdates = {};
 
     // Update basic fields - handle both name (combined) and firstName/lastName
     if (name) {
       const nameParts = name.split(' ');
-      updates.firstName = nameParts[0];
-      updates.lastName = nameParts.slice(1).join(' ') || '';
+      userUpdates.firstName = nameParts[0];
+      userUpdates.lastName = nameParts.slice(1).join(' ') || '';
     } else {
-      if (firstName) updates.firstName = firstName;
-      if (lastName) updates.lastName = lastName;
+      if (firstName) userUpdates.firstName = firstName;
+      if (lastName) userUpdates.lastName = lastName;
     }
-    if (phone !== undefined) updates.phone = phone;
+    if (phone !== undefined) userUpdates.phone = phone;
 
     // Update email (check for duplicates)
     if (email && email !== user.email) {
@@ -634,7 +648,7 @@ const updateMyProfile = async (req, res) => {
           message: 'Este email ya está en uso por otro usuario'
         });
       }
-      updates.email = email;
+      userUpdates.email = email;
     }
 
     // Update password
@@ -656,23 +670,23 @@ const updateMyProfile = async (req, res) => {
         });
       }
 
-      updates.password = await bcrypt.hash(newPassword, 10);
+      userUpdates.password = await bcrypt.hash(newPassword, 10);
     }
 
-    // Update PIN - require current PIN if user already has one
-    if (pin !== undefined) {
+    // Update PIN - for owners, PIN is stored in Establishment table
+    if (pin !== undefined && establishment) {
       if (pin === null || pin === '') {
-        updates.pin = null;
+        establishmentUpdates.pin = null;
       } else if (/^[0-9]{4}$/.test(pin)) {
-        // If user already has a PIN, require currentPin to change it
-        if (user.pin && req.body.currentPin !== user.pin) {
+        // If establishment already has a PIN, require currentPin to change it
+        if (establishment.pin && req.body.currentPin !== establishment.pin) {
           return res.status(401).json({
             success: false,
             error: 'Invalid current PIN',
             message: 'El PIN actual es incorrecto'
           });
         }
-        updates.pin = pin;
+        establishmentUpdates.pin = pin;
       } else {
         return res.status(400).json({
           success: false,
@@ -682,7 +696,13 @@ const updateMyProfile = async (req, res) => {
       }
     }
 
-    await user.update(updates);
+    // Apply updates
+    if (Object.keys(userUpdates).length > 0) {
+      await user.update(userUpdates);
+    }
+    if (Object.keys(establishmentUpdates).length > 0 && establishment) {
+      await establishment.update(establishmentUpdates);
+    }
 
     res.json({
       success: true,
