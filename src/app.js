@@ -12,6 +12,11 @@ const { connectRedis } = require('./config/redis');
 
 const app = express();
 
+// Trust proxy for Railway/production environments (needed for rate limiting and correct IP detection)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Security middleware - configure helmet to allow cross-origin images
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
