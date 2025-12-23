@@ -162,7 +162,7 @@ router.post('/logo/:establishmentId', authenticateToken, (req, res, next) => {
       }
     }
 
-    const logoUrl = `/uploads/establishments/${req.file.filename}`;
+    const logoUrl = useCloudinary ? req.file.path : `/uploads/establishments/${req.file.filename}`;
     
     await establishment.update({ logo: logoUrl });
     
