@@ -353,23 +353,32 @@ const validatePin = async (req, res) => {
       });
     }
 
-    let userRecord;
     let userPin;
 
     if (isStaff) {
-      userRecord = await EstablishmentStaff.findByPk(userId);
-      userPin = userRecord?.pin;
+      const staff = await EstablishmentStaff.findByPk(userId);
+      if (!staff) {
+        return res.status(404).json({
+          success: false,
+          error: 'Staff not found',
+          message: 'Usuario no encontrado'
+        });
+      }
+      userPin = staff.pin;
     } else {
-      userRecord = await User.findByPk(userId);
-      userPin = userRecord?.pin;
-    }
-    
-    if (!userRecord) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found',
-        message: 'Usuario no encontrado'
+      // For owners, PIN is stored in Establishment table
+      const establishment = await Establishment.findOne({
+        where: { userId }
       });
+      
+      if (!establishment) {
+        return res.status(404).json({
+          success: false,
+          error: 'Establishment not found',
+          message: 'Establecimiento no encontrado'
+        });
+      }
+      userPin = establishment.pin;
     }
 
     if (!userPin) {
