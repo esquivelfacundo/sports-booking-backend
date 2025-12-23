@@ -13,6 +13,10 @@ const router = express.Router();
 // Use Cloudinary in production, local storage in development
 const useCloudinary = process.env.NODE_ENV === 'production' && process.env.CLOUDINARY_CLOUD_NAME;
 
+// Define directories for local storage (always define, even if using Cloudinary)
+const uploadsDir = path.join(__dirname, '../../uploads');
+const establishmentsDir = path.join(uploadsDir, 'establishments');
+
 let storage;
 if (useCloudinary) {
   // Cloudinary storage for production
@@ -26,9 +30,6 @@ if (useCloudinary) {
   });
 } else {
   // Local storage for development
-  const uploadsDir = path.join(__dirname, '../../uploads');
-  const establishmentsDir = path.join(uploadsDir, 'establishments');
-  
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
@@ -150,8 +151,8 @@ router.post('/logo/:establishmentId', authenticateToken, (req, res, next) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    // Delete old logo if exists
-    if (establishment.logo) {
+    // Delete old logo if exists (only for local files, not Cloudinary URLs)
+    if (establishment.logo && !establishment.logo.startsWith('http')) {
       const oldLogoPath = path.join(establishmentsDir, path.basename(establishment.logo));
       if (fs.existsSync(oldLogoPath)) {
         try {
