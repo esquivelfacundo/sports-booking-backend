@@ -68,65 +68,105 @@ async function cleanDatabaseKeepUsers() {
 
       // 2. Eliminar datos relacionados a establecimientos que NO se mantienen
       if (keepEstablishmentIds.length > 0) {
-        // Clientes
-        await sequelize.query(`
-          DELETE FROM clients 
-          WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-        `, { transaction });
-        console.log('  ✅ Clientes eliminados');
-
-        // Staff
-        await sequelize.query(`
-          DELETE FROM staff 
-          WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-        `, { transaction });
-        console.log('  ✅ Personal eliminado');
-
-        // Productos
-        await sequelize.query(`
-          DELETE FROM products 
-          WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-        `, { transaction });
-        console.log('  ✅ Productos eliminados');
-
-        // Movimientos de caja
-        await sequelize.query(`
-          DELETE FROM cash_register_movements 
-          WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-        `, { transaction });
-        console.log('  ✅ Movimientos de caja eliminados');
-
-        // Cajas registradoras
-        await sequelize.query(`
-          DELETE FROM cash_registers 
-          WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-        `, { transaction });
-        console.log('  ✅ Cajas registradoras eliminadas');
-
-        // Órdenes (primero los items y pagos)
-        await sequelize.query(`
-          DELETE FROM order_items 
-          WHERE "orderId" IN (
-            SELECT id FROM orders 
+        // Clientes (si existe la tabla)
+        try {
+          await sequelize.query(`
+            DELETE FROM clients 
             WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-          )
-        `, { transaction });
-        console.log('  ✅ Items de órdenes eliminados');
+          `, { transaction });
+          console.log('  ✅ Clientes eliminados');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla clients no existe');
+        }
 
-        await sequelize.query(`
-          DELETE FROM order_payments 
-          WHERE "orderId" IN (
-            SELECT id FROM orders 
+        // Staff (si existe la tabla)
+        try {
+          await sequelize.query(`
+            DELETE FROM staff 
             WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-          )
-        `, { transaction });
-        console.log('  ✅ Pagos de órdenes eliminados');
+          `, { transaction });
+          console.log('  ✅ Personal eliminado');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla staff no existe');
+        }
 
-        await sequelize.query(`
-          DELETE FROM orders 
-          WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
-        `, { transaction });
-        console.log('  ✅ Órdenes eliminadas');
+        // Productos (si existe la tabla)
+        try {
+          await sequelize.query(`
+            DELETE FROM products 
+            WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
+          `, { transaction });
+          console.log('  ✅ Productos eliminados');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla products no existe');
+        }
+
+        // Movimientos de caja (si existe la tabla)
+        try {
+          await sequelize.query(`
+            DELETE FROM cash_register_movements 
+            WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
+          `, { transaction });
+          console.log('  ✅ Movimientos de caja eliminados');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla cash_register_movements no existe');
+        }
+
+        // Cajas registradoras (si existe la tabla)
+        try {
+          await sequelize.query(`
+            DELETE FROM cash_registers 
+            WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
+          `, { transaction });
+          console.log('  ✅ Cajas registradoras eliminadas');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla cash_registers no existe');
+        }
+
+        // Órdenes (si existen las tablas)
+        try {
+          await sequelize.query(`
+            DELETE FROM order_items 
+            WHERE "orderId" IN (
+              SELECT id FROM orders 
+              WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
+            )
+          `, { transaction });
+          console.log('  ✅ Items de órdenes eliminados');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla order_items no existe');
+        }
+
+        try {
+          await sequelize.query(`
+            DELETE FROM order_payments 
+            WHERE "orderId" IN (
+              SELECT id FROM orders 
+              WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
+            )
+          `, { transaction });
+          console.log('  ✅ Pagos de órdenes eliminados');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla order_payments no existe');
+        }
+
+        try {
+          await sequelize.query(`
+            DELETE FROM orders 
+            WHERE "establishmentId" NOT IN (${keepEstablishmentIds.map(id => `'${id}'`).join(',')})
+          `, { transaction });
+          console.log('  ✅ Órdenes eliminadas');
+        } catch (err) {
+          if (err.original?.code !== '42P01') throw err;
+          console.log('  ⚠️  Tabla orders no existe');
+        }
 
         // Canchas
         await sequelize.query(`
