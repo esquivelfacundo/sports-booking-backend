@@ -5,30 +5,47 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authenticateToken } = require('../middleware/auth');
 const { Establishment } = require('../models');
+const cloudinary = require('../config/cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const router = express.Router();
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads');
-const establishmentsDir = path.join(uploadsDir, 'establishments');
+// Use Cloudinary in production, local storage in development
+const useCloudinary = process.env.NODE_ENV === 'production' && process.env.CLOUDINARY_CLOUD_NAME;
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(establishmentsDir)) {
-  fs.mkdirSync(establishmentsDir, { recursive: true });
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, establishmentsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+let storage;
+if (useCloudinary) {
+  // Cloudinary storage for production
+  storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+      folder: 'miscanchas/establishments',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      transformation: [{ width: 1920, height: 1080, crop: 'limit' }]
+    }
+  });
+} else {
+  // Local storage for development
+  const uploadsDir = path.join(__dirname, '../../uploads');
+  const establishmentsDir = path.join(uploadsDir, 'establishments');
+  
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
   }
-});
+  if (!fs.existsSync(establishmentsDir)) {
+    fs.mkdirSync(establishmentsDir, { recursive: true });
+  }
+  
+  storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, establishmentsDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
+      cb(null, uniqueName);
+    }
+  });
+}
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
@@ -54,7 +71,7 @@ router.post('/image', authenticateToken, upload.single('image'), (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const imageUrl = `/uploads/establishments/${req.file.filename}`;
+    const imageUrl = useCloudinary ? req.file.path : `/uploads/establishments/${req.file.filename}`;
     
     res.json({
       success: true,
@@ -74,7 +91,7 @@ router.post('/images', authenticateToken, upload.array('images', 10), (req, res)
       return res.status(400).json({ error: 'No files uploaded' });
     }
 
-    const urls = req.files.map(file => `/uploads/establishments/${file.filename}`);
+    const urls = req.files.map(file => useCloudinary ? file.path : `/uploads/establishments/${file.filename}`);
     
     res.json({
       success: true,
