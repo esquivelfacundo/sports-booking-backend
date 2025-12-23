@@ -557,6 +557,87 @@ const googleLogin = async (req, res) => {
   }
 };
 
+const superAdminLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate against environment variables
+    const validEmail = process.env.SUPERADMIN_EMAIL;
+    const validSecret = process.env.SUPERADMIN_SECRET;
+
+    if (!validEmail || !validSecret) {
+      console.error('Super admin credentials not configured');
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Super admin not configured'
+      });
+    }
+
+    // Check credentials
+    if (email !== validEmail || password !== validSecret) {
+      return res.status(401).json({
+        error: 'Invalid credentials',
+        message: 'Email or password is incorrect'
+      });
+    }
+
+    // Find or create superadmin user
+    let user = await User.findOne({ where: { email: validEmail } });
+
+    if (!user) {
+      // Create superadmin user if doesn't exist
+      const hashedPassword = await bcrypt.hash(validSecret, 10);
+      user = await User.create({
+        email: validEmail,
+        password: hashedPassword,
+        firstName: 'Super',
+        lastName: 'Admin',
+        userType: 'superadmin',
+        isActive: true
+      });
+      console.log('Super admin user created');
+    } else if (user.userType !== 'superadmin') {
+      // Update existing user to superadmin
+      await user.update({ userType: 'superadmin', isActive: true });
+      console.log('User upgraded to superadmin');
+    }
+
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { userId: user.id, userType: 'superadmin' },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+    );
+
+    const refreshTokenValue = jwt.sign(
+      { userId: user.id, userType: 'superadmin' },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    );
+
+    res.json({
+      success: true,
+      tokens: {
+        accessToken,
+        refreshToken: refreshTokenValue
+      },
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        userType: user.userType
+      }
+    });
+  } catch (error) {
+    console.error('Super admin login error:', error);
+    res.status(500).json({
+      error: 'Login failed',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -566,5 +647,6 @@ module.exports = {
   changePassword,
   forgotPassword,
   resetPassword,
-  googleLogin
+  googleLogin,
+  superAdminLogin
 };

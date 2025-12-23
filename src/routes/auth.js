@@ -10,7 +10,8 @@ const {
   changePassword,
   forgotPassword,
   resetPassword,
-  googleLogin
+  googleLogin,
+  superAdminLogin
 } = require('../controllers/authController');
 
 const router = express.Router();
@@ -116,6 +117,7 @@ const updateProfileValidation = [
 router.post('/register', registerValidation, handleValidationErrors, register);
 router.post('/login', loginValidation, handleValidationErrors, login);
 router.post('/google', googleLogin);
+router.post('/superadmin-login', superAdminLogin);
 router.post('/refresh-token', refreshToken);
 router.post('/forgot-password', [
   body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email address')
