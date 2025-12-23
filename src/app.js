@@ -54,13 +54,16 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Rate limiting - more permissive in development
+// Rate limiting - more permissive for SPA applications
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 1 * 60 * 1000, // 1 minute
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 500 : 100), // 500 in dev, 100 in prod
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 1000 : 300), // 1000 in dev, 300 in prod
   message: {
-    error: 'Too many requests from this IP, please try again later.'
+    error: 'Demasiadas solicitudes. Por favor, espera un momento antes de intentar de nuevo.',
+    code: 'TOO_MANY_REQUESTS'
   },
+  standardHeaders: true,
+  legacyHeaders: false,
   skip: (req) => process.env.NODE_ENV === 'development' // Skip rate limiting in development
 });
 
