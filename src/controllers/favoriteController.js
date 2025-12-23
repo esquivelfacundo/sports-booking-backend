@@ -11,7 +11,7 @@ const getFavorites = async (req, res) => {
         as: 'establishment',
         attributes: [
           'id', 'name', 'address', 'city', 'phone', 'email',
-          'rating', 'reviewCount', 'images', 'sports', 'amenities',
+          'rating', 'totalReviews', 'images', 'sports', 'amenities',
           'priceRange', 'isActive'
         ]
       }],

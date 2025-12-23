@@ -20,8 +20,8 @@ const verifyRefreshToken = (token) => {
   return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 };
 
-const generateTokenPair = (userId) => {
-  const payload = { userId };
+const generateTokenPair = (userId, additionalData = {}) => {
+  const payload = { userId, ...additionalData };
   
   return {
     accessToken: generateToken(payload),

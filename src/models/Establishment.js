@@ -17,6 +17,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
+    slug: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+      validate: {
+        is: /^[a-z0-9-]+$/i // Only alphanumeric and hyphens
+      }
+    },
     description: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -80,6 +88,14 @@ module.exports = (sequelize, DataTypes) => {
         sunday: { open: '08:00', close: '22:00', closed: false }
       }
     },
+    closedDates: {
+      type: DataTypes.JSON,
+      defaultValue: []  // Array of date strings like ['2025-12-25', '2025-01-01']
+    },
+    useNationalHolidays: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
@@ -107,6 +123,147 @@ module.exports = (sequelize, DataTypes) => {
     sports: {
       type: DataTypes.JSON,
       defaultValue: []
+    },
+    
+    // Mercado Pago Integration
+    mpUserId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Mercado Pago User ID of the establishment'
+    },
+    mpAccessToken: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'OAuth access token for receiving payments'
+    },
+    mpRefreshToken: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'OAuth refresh token'
+    },
+    mpPublicKey: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    mpTokenExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    mpEmail: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Email of the connected MP account'
+    },
+    mpConnectedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    mpActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Whether MP account is connected and active'
+    },
+    
+    // Custom fee override (null = use platform default)
+    customFeePercent: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      comment: 'Custom platform fee for this establishment (overrides global default)'
+    },
+    
+    // Deposit/Seña configuration
+    requireDeposit: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Whether to require deposit for online bookings'
+    },
+    depositType: {
+      type: DataTypes.ENUM('percentage', 'fixed'),
+      defaultValue: 'percentage',
+      comment: 'Type of deposit: percentage of total or fixed amount'
+    },
+    depositPercentage: {
+      type: DataTypes.INTEGER,
+      defaultValue: 50,
+      comment: 'Percentage of total to charge as deposit (if depositType is percentage)'
+    },
+    depositFixedAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 5000,
+      comment: 'Fixed deposit amount (if depositType is fixed)'
+    },
+    
+    // Full payment option
+    allowFullPayment: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Whether to allow clients to pay full amount online (not just deposit)'
+    },
+    
+    // Booking restrictions
+    maxAdvanceBookingDays: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30,
+      comment: 'Maximum days in advance that bookings can be made'
+    },
+    minAdvanceBookingHours: {
+      type: DataTypes.INTEGER,
+      defaultValue: 2,
+      comment: 'Minimum hours in advance required for booking'
+    },
+    allowSameDayBooking: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Whether same-day bookings are allowed'
+    },
+    cancellationDeadlineHours: {
+      type: DataTypes.INTEGER,
+      defaultValue: 24,
+      comment: 'Hours before booking when cancellation is no longer allowed'
+    },
+    
+    // Cancellation policy
+    cancellationPolicy: {
+      type: DataTypes.ENUM('full_refund', 'partial_refund', 'no_refund', 'credit'),
+      defaultValue: 'partial_refund',
+      comment: 'Policy for refunds when booking is cancelled'
+    },
+    refundPercentage: {
+      type: DataTypes.INTEGER,
+      defaultValue: 50,
+      comment: 'Percentage of payment to refund (if cancellationPolicy is partial_refund)'
+    },
+    
+    // No-show penalty
+    noShowPenalty: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Whether to apply penalty when client does not show up'
+    },
+    noShowPenaltyType: {
+      type: DataTypes.ENUM('full_charge', 'deposit_only', 'percentage'),
+      defaultValue: 'deposit_only',
+      comment: 'Type of penalty for no-show'
+    },
+    noShowPenaltyPercentage: {
+      type: DataTypes.INTEGER,
+      defaultValue: 100,
+      comment: 'Percentage to charge for no-show (if noShowPenaltyType is percentage)'
+    },
+    
+    // Deposit payment deadline
+    depositPaymentDeadlineHours: {
+      type: DataTypes.INTEGER,
+      defaultValue: 2,
+      comment: 'Hours allowed to complete deposit payment before booking is cancelled'
+    },
+    
+    // API Key for external integrations (WhatsApp bot, etc.)
+    apiKey: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+      comment: 'API Key for external integrations like WhatsApp bot'
     }
   }, {
     tableName: 'establishments',

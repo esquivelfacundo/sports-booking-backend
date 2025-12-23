@@ -1,6 +1,20 @@
 const { Court, Establishment, TimeSlot, Booking } = require('../models');
 const { Op } = require('sequelize');
 
+// Helper function to verify establishment access (includes staff)
+const verifyEstablishmentAccess = async (req, establishmentId) => {
+  const isAdmin = req.user.userType === 'admin';
+  const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+  
+  if (isAdmin || isStaff) {
+    return await Establishment.findByPk(establishmentId);
+  }
+  
+  return await Establishment.findOne({
+    where: { id: establishmentId, userId: req.user.id }
+  });
+};
+
 const createCourt = async (req, res) => {
   try {
     const {
@@ -19,10 +33,8 @@ const createCourt = async (req, res) => {
       rules
     } = req.body;
 
-    // Verify establishment ownership
-    const establishment = await Establishment.findOne({
-      where: { id: establishmentId, userId: req.user.id }
-    });
+    // Verify establishment access (includes staff)
+    const establishment = await verifyEstablishmentAccess(req, establishmentId);
 
     if (!establishment) {
       return res.status(404).json({
@@ -189,14 +201,38 @@ const updateCourt = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const court = await Court.findOne({
-      where: { id },
-      include: [{
-        model: Establishment,
-        as: 'establishment',
-        where: { userId: req.user.id }
-      }]
-    });
+    // For admin/staff users, allow updating any court in their establishment
+    const isAdmin = req.user.userType === 'admin';
+    const isStaff = req.user.isStaff;
+    
+    let court;
+    if (isAdmin) {
+      court = await Court.findOne({
+        where: { id },
+        include: [{
+          model: Establishment,
+          as: 'establishment'
+        }]
+      });
+    } else if (isStaff) {
+      court = await Court.findOne({
+        where: { id },
+        include: [{
+          model: Establishment,
+          as: 'establishment',
+          where: { id: req.user.establishmentId }
+        }]
+      });
+    } else {
+      court = await Court.findOne({
+        where: { id },
+        include: [{
+          model: Establishment,
+          as: 'establishment',
+          where: { userId: req.user.id }
+        }]
+      });
+    }
 
     if (!court) {
       return res.status(404).json({
@@ -226,14 +262,38 @@ const deleteCourt = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const court = await Court.findOne({
-      where: { id },
-      include: [{
-        model: Establishment,
-        as: 'establishment',
-        where: { userId: req.user.id }
-      }]
-    });
+    // For admin/staff users, allow deleting any court in their establishment
+    const isAdmin = req.user.userType === 'admin';
+    const isStaff = req.user.isStaff;
+    
+    let court;
+    if (isAdmin) {
+      court = await Court.findOne({
+        where: { id },
+        include: [{
+          model: Establishment,
+          as: 'establishment'
+        }]
+      });
+    } else if (isStaff) {
+      court = await Court.findOne({
+        where: { id },
+        include: [{
+          model: Establishment,
+          as: 'establishment',
+          where: { id: req.user.establishmentId }
+        }]
+      });
+    } else {
+      court = await Court.findOne({
+        where: { id },
+        include: [{
+          model: Establishment,
+          as: 'establishment',
+          where: { userId: req.user.id }
+        }]
+      });
+    }
 
     if (!court) {
       return res.status(404).json({
@@ -323,8 +383,8 @@ const getCourtAvailability = async (req, res) => {
     });
 
     // Generate available time slots based on opening hours
-    const dayOfWeek = new Date(date).toLocaleLowerCase('en-US', { weekday: 'long' });
-    const openingHours = court.establishment.openingHours[dayOfWeek];
+    const dayOfWeek = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const openingHours = court.establishment?.openingHours?.[dayOfWeek];
 
     if (!openingHours || openingHours.closed) {
       return res.json({
@@ -390,15 +450,15 @@ const generateTimeSlots = (openTime, closeTime, duration, bookings, blockedSlots
     });
     
     if (!isBooked && !isBlocked) {
-      let price = court.pricePerHour;
+      let price = parseFloat(court.pricePerHour) || 0;
       
       // Adjust price based on duration
       if (durationMinutes === 90 && court.pricePerHour90) {
-        price = court.pricePerHour90;
+        price = parseFloat(court.pricePerHour90);
       } else if (durationMinutes === 120 && court.pricePerHour120) {
-        price = court.pricePerHour120;
+        price = parseFloat(court.pricePerHour120);
       } else if (durationMinutes !== 60) {
-        price = (court.pricePerHour / 60) * durationMinutes;
+        price = (price / 60) * durationMinutes;
       }
       
       slots.push({

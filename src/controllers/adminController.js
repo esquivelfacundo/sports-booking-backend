@@ -1,4 +1,4 @@
-const { User, Establishment, Court, Booking, Payment, Review } = require('../models');
+const { User, Establishment, Court, Booking, Payment, Review, ClientDebt, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // ==================== ESTABLISHMENTS ====================
@@ -55,25 +55,73 @@ const getAllEstablishments = async (req, res) => {
       offset: parseInt(offset)
     });
 
+    // Get booking counts per establishment
+    const bookingCounts = await Booking.findAll({
+      attributes: [
+        'establishmentId',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalBookings'],
+        [sequelize.fn('SUM', sequelize.literal("CASE WHEN status = 'completed' THEN 1 ELSE 0 END")), 'completedBookings'],
+        [sequelize.fn('SUM', sequelize.literal("CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END")), 'cancelledBookings'],
+        [sequelize.fn('SUM', sequelize.col('totalAmount')), 'totalRevenue'],
+        [sequelize.fn('SUM', sequelize.col('depositAmount')), 'totalDeposits']
+      ],
+      group: ['establishmentId'],
+      raw: true
+    });
+
+    // Get platform default fee
+    const { PlatformConfig } = require('../models');
+    const platformConfig = await PlatformConfig.findOne();
+    const defaultFeePercent = platformConfig?.defaultFeePercent || 10;
+
+    const bookingCountMap = {};
+    bookingCounts.forEach(bc => {
+      bookingCountMap[bc.establishmentId] = {
+        totalBookings: parseInt(bc.totalBookings) || 0,
+        completedBookings: parseInt(bc.completedBookings) || 0,
+        cancelledBookings: parseInt(bc.cancelledBookings) || 0,
+        totalRevenue: parseFloat(bc.totalRevenue) || 0,
+        totalDeposits: parseFloat(bc.totalDeposits) || 0
+      };
+    });
+
     // Transform data for frontend
-    const transformedEstablishments = establishments.map(est => ({
-      id: est.id,
-      name: est.name,
-      city: est.city,
-      email: est.email,
-      registrationStatus: est.registrationStatus,
-      createdAt: est.createdAt,
-      address: est.address,
-      phone: est.phone,
-      description: est.description,
-      amenities: est.amenities || [],
-      sports: est.sports || [],
-      rating: est.rating || 0,
-      reviewCount: est.reviewCount || 0,
-      isActive: est.isActive,
-      owner: est.owner,
-      courtsCount: est.courts?.length || 0
-    }));
+    const transformedEstablishments = establishments.map(est => {
+      const bookingStats = bookingCountMap[est.id] || { totalBookings: 0, completedBookings: 0, cancelledBookings: 0, totalRevenue: 0, totalDeposits: 0 };
+      // Calculate commission: use custom fee if set, otherwise default
+      // Commission is calculated on totalRevenue (court price x hours), NOT on deposits
+      const feePercent = est.customFeePercent !== null ? parseFloat(est.customFeePercent) : defaultFeePercent;
+      const commissionsGenerated = Math.round(bookingStats.totalRevenue * (feePercent / 100) * 100) / 100;
+      
+      return {
+        id: est.id,
+        name: est.name,
+        city: est.city,
+        email: est.email,
+        registrationStatus: est.registrationStatus,
+        createdAt: est.createdAt,
+        address: est.address,
+        phone: est.phone,
+        description: est.description,
+        amenities: est.amenities || [],
+        sports: est.sports || [],
+        rating: est.rating || 0,
+        reviewCount: est.reviewCount || 0,
+        isActive: est.isActive,
+        owner: est.owner,
+        courtsCount: est.courts?.length || 0,
+        customFeePercent: est.customFeePercent,
+        effectiveFeePercent: feePercent,
+        mpConnected: !!est.mpAccessToken,
+        // Stats
+        totalBookings: bookingStats.totalBookings,
+        completedBookings: bookingStats.completedBookings,
+        cancelledBookings: bookingStats.cancelledBookings,
+        totalRevenue: bookingStats.totalRevenue,
+        totalDeposits: bookingStats.totalDeposits,
+        commissionsGenerated: commissionsGenerated
+      };
+    });
 
     res.json({
       success: true,
@@ -159,6 +207,57 @@ const rejectEstablishment = async (req, res) => {
     console.error('Error rejecting establishment:', error);
     res.status(500).json({
       error: 'Error rejecting establishment',
+      message: error.message
+    });
+  }
+};
+
+const updateEstablishmentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, reason } = req.body;
+    
+    if (!['approved', 'pending', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        error: 'Invalid status',
+        message: 'Status must be approved, pending, or rejected'
+      });
+    }
+    
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Establishment not found'
+      });
+    }
+
+    const updateData = {
+      registrationStatus: status,
+      isActive: status === 'approved'
+    };
+
+    if (status === 'approved') {
+      updateData.approvedAt = new Date();
+      updateData.approvedBy = req.user.id;
+    } else if (status === 'rejected') {
+      updateData.rejectedAt = new Date();
+      updateData.rejectedBy = req.user.id;
+      if (reason) updateData.rejectionReason = reason;
+    }
+
+    await establishment.update(updateData);
+
+    res.json({
+      success: true,
+      message: `Establishment status changed to ${status}`,
+      data: establishment
+    });
+  } catch (error) {
+    console.error('Error updating establishment status:', error);
+    res.status(500).json({
+      error: 'Error updating establishment status',
       message: error.message
     });
   }
@@ -427,23 +526,37 @@ const getPlatformStats = async (req, res) => {
       where: { status: 'cancelled' }
     });
 
-    // Get payment stats
-    const totalPayments = await Payment.count();
-    const completedPayments = await Payment.count({
-      where: { status: 'completed' }
-    });
-    
-    // Calculate total revenue
-    const revenueResult = await Payment.sum('amount', {
-      where: { status: 'completed' }
-    });
-    const totalRevenue = revenueResult || 0;
+    // Get payment stats (may not exist yet)
+    let totalPayments = 0;
+    let completedPayments = 0;
+    let totalRevenue = 0;
+    try {
+      if (Payment) {
+        totalPayments = await Payment.count();
+        completedPayments = await Payment.count({
+          where: { status: 'completed' }
+        });
+        const revenueResult = await Payment.sum('amount', {
+          where: { status: 'completed' }
+        });
+        totalRevenue = revenueResult || 0;
+      }
+    } catch (e) {
+      console.log('Payment table not available:', e.message);
+    }
 
     // Get court stats
     const totalCourts = await Court.count();
 
-    // Get review stats
-    const totalReviews = await Review.count();
+    // Get review stats (may not exist yet)
+    let totalReviews = 0;
+    try {
+      if (Review) {
+        totalReviews = await Review.count();
+      }
+    } catch (e) {
+      console.log('Review table not available:', e.message);
+    }
 
     res.json({
       success: true,
@@ -500,6 +613,7 @@ module.exports = {
   getAllEstablishments,
   approveEstablishment,
   rejectEstablishment,
+  updateEstablishmentStatus,
   deleteEstablishmentAdmin,
   // Users
   getAllUsers,

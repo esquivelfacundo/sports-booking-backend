@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const morgan = require('morgan');
+const path = require('path');
 require('dotenv').config();
 
 const { sequelize, testConnection } = require('./config/database');
@@ -11,8 +12,11 @@ const { connectRedis } = require('./config/redis');
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// Security middleware - configure helmet to allow cross-origin images
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false
+}));
 
 // CORS configuration
 const corsOptions = {
@@ -45,13 +49,14 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Rate limiting
+// Rate limiting - more permissive in development
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 1 * 60 * 1000, // 1 minute
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 500 : 100), // 500 in dev, 100 in prod
   message: {
     error: 'Too many requests from this IP, please try again later.'
-  }
+  },
+  skip: (req) => process.env.NODE_ENV === 'development' // Skip rate limiting in development
 });
 
 app.use('/api/', limiter);
@@ -92,6 +97,31 @@ app.use('/api/favorites', require('./routes/favorites'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/tournaments', require('./routes/tournaments'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/finance', require('./routes/finance'));
+app.use('/api/staff', require('./routes/staff'));
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/mp', require('./routes/mp'));
+app.use('/api/debts', require('./routes/debts'));
+app.use('/api/products', require('./routes/products'));
+app.use('/api/product-categories', require('./routes/product-categories'));
+app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/stock-movements', require('./routes/stock-movements'));
+app.use('/api/booking-consumptions', require('./routes/booking-consumptions'));
+app.use('/api/orders', require('./routes/orders'));
+app.use('/api/payment-methods', require('./routes/payment-methods'));
+app.use('/api/expense-categories', require('./routes/expense-categories'));
+app.use('/api/cash-registers', require('./routes/cash-registers'));
+app.use('/api/cash-register-movements', require('./routes/cash-register-movements'));
+app.use('/api/current-accounts', require('./routes/currentAccounts'));
+app.use('/api/amenities', require('./routes/amenities'));
+app.use('/api/integrations', require('./routes/integrations'));
+app.use('/api/v1', require('./routes/api-v1'));
+app.use('/api/whatsapp', require('./routes/whatsapp'));
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // 404 handler
 app.use('*', (req, res) => {

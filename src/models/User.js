@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     password: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: true // Allow null for OAuth users (Google, etc.)
     },
     firstName: {
       type: DataTypes.STRING,
@@ -88,6 +88,22 @@ module.exports = (sequelize, DataTypes) => {
     },
     passwordResetExpires: {
       type: DataTypes.DATE,
+      allowNull: true
+    },
+    pin: {
+      type: DataTypes.STRING(4),
+      allowNull: true,
+      validate: {
+        is: /^[0-9]{4}$/
+      }
+    },
+    googleId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
+    },
+    avatar: {
+      type: DataTypes.STRING,
       allowNull: true
     }
   }, {

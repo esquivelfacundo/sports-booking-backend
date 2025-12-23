@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, EstablishmentStaff } = require('../models');
 
 const authenticateToken = async (req, res, next) => {
   try {
@@ -13,7 +13,64 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    // Check for superadmin token first
+    if (token.startsWith('superadmin_')) {
+      // Validate superadmin token format: superadmin_{secret}_{timestamp}
+      const parts = token.split('_');
+      const validSecret = process.env.SUPERADMIN_SECRET || 'default_secret';
+      if (parts.length >= 3 && parts[1] === validSecret) {
+        req.user = {
+          id: 'superadmin-1',
+          email: process.env.SUPERADMIN_EMAIL || 'admin@miscanchas.com',
+          firstName: 'Super',
+          lastName: 'Admin',
+          userType: 'superadmin',
+          role: 'superadmin',
+          isActive: true
+        };
+        return next();
+      }
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if this is a staff token
+    if (decoded.isStaff) {
+      // Get staff from database
+      const staff = await EstablishmentStaff.findByPk(decoded.userId, {
+        attributes: { exclude: ['password'] }
+      });
+
+      if (!staff) {
+        return res.status(401).json({
+          error: 'Invalid token',
+          message: 'Staff not found'
+        });
+      }
+
+      if (!staff.isActive) {
+        return res.status(401).json({
+          error: 'Account disabled',
+          message: 'Your account has been disabled'
+        });
+      }
+
+      // Create a user-like object for staff
+      req.user = {
+        id: staff.id,
+        email: staff.email,
+        firstName: staff.name.split(' ')[0],
+        lastName: staff.name.split(' ').slice(1).join(' ') || '',
+        userType: 'establishment',
+        isStaff: true,
+        staffRole: staff.role,
+        permissions: staff.permissions,
+        establishmentId: staff.establishmentId,
+        isActive: staff.isActive
+      };
+      req.staff = staff;
+      return next();
+    }
     
     // Get user from database
     const user = await User.findByPk(decoded.userId, {
@@ -51,6 +108,7 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    console.error('Authentication middleware error:', error);
     return res.status(500).json({
       error: 'Authentication error',
       message: 'Failed to authenticate token'
@@ -69,7 +127,12 @@ const requireRole = (roles) => {
 
     const userRoles = Array.isArray(roles) ? roles : [roles];
     
-    if (!userRoles.includes(req.user.userType)) {
+    // Superadmin has access to everything
+    if (req.user.userType === 'superadmin' || req.user.role === 'superadmin') {
+      return next();
+    }
+    
+    if (!userRoles.includes(req.user.userType) && !userRoles.includes(req.user.role)) {
       return res.status(403).json({
         error: 'Insufficient permissions',
         message: 'You do not have permission to access this resource'

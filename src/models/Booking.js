@@ -7,9 +7,17 @@ module.exports = (sequelize, DataTypes) => {
     },
     userId: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true, // Allow null for guest bookings created by staff
       references: {
         model: 'users',
+        key: 'id'
+      }
+    },
+    createdByStaffId: {
+      type: DataTypes.UUID,
+      allowNull: true, // Set when booking is created by staff
+      references: {
+        model: 'establishment_staff',
         key: 'id'
       }
     },
@@ -23,9 +31,17 @@ module.exports = (sequelize, DataTypes) => {
     },
     courtId: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true, // Allow null for amenity bookings
       references: {
         model: 'courts',
+        key: 'id'
+      }
+    },
+    amenityId: {
+      type: DataTypes.UUID,
+      allowNull: true, // Set when booking an amenity instead of a court
+      references: {
+        model: 'amenities',
         key: 'id'
       }
     },
@@ -50,7 +66,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     status: {
-      type: DataTypes.ENUM('pending', 'confirmed', 'cancelled', 'completed', 'no_show'),
+      type: DataTypes.ENUM('pending', 'confirmed', 'in_progress', 'completed', 'no_show', 'cancelled'),
       defaultValue: 'pending'
     },
     paymentStatus: {
@@ -69,6 +85,74 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    // Client reference (for establishment clients)
+    clientId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'clients',
+        key: 'id'
+      }
+    },
+    // Guest booking fields (for admin-created bookings without client record)
+    clientName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    clientPhone: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    clientEmail: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    bookingType: {
+      type: DataTypes.STRING,
+      defaultValue: 'normal'
+    },
+    isRecurring: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    depositAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0
+    },
+    initialDeposit: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0,
+      comment: 'Original deposit amount paid at booking time (does not change with partial payments)'
+    },
+    depositPercent: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Deposit percentage applied at booking time (e.g., 30, 50, 100)'
+    },
+    depositMethod: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    serviceFee: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0,
+      comment: 'Platform service fee charged on this booking'
+    },
+    mpPaymentId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'MercadoPago payment ID'
+    },
+    mpPreferenceId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'MercadoPago preference ID'
+    },
+    paidAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'When the payment was completed'
+    },
     cancellationReason: {
       type: DataTypes.STRING,
       allowNull: true
@@ -84,6 +168,11 @@ module.exports = (sequelize, DataTypes) => {
     completedAt: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    startedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'When the booking was started (in_progress)'
     },
     reminderSent: {
       type: DataTypes.BOOLEAN,
@@ -101,10 +190,16 @@ module.exports = (sequelize, DataTypes) => {
         fields: ['userId']
       },
       {
+        fields: ['createdByStaffId']
+      },
+      {
         fields: ['establishmentId']
       },
       {
         fields: ['courtId']
+      },
+      {
+        fields: ['clientId']
       },
       {
         fields: ['date']

@@ -144,6 +144,64 @@ const getEstablishments = async (req, res) => {
   }
 };
 
+const getEstablishmentBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    const establishment = await Establishment.findOne({
+      where: { slug, isActive: true },
+      include: [
+        {
+          model: Court,
+          as: 'courts',
+          where: { isActive: true },
+          required: false
+        },
+        {
+          model: Review,
+          as: 'reviews',
+          include: [{
+            model: User,
+            as: 'user',
+            attributes: ['firstName', 'lastName', 'profileImage']
+          }],
+          order: [['createdAt', 'DESC']]
+        },
+        {
+          model: User,
+          as: 'owner',
+          attributes: ['firstName', 'lastName', 'email', 'phone']
+        }
+      ]
+    });
+
+    if (!establishment) {
+      return res.status(404).json({
+        error: 'Establishment not found',
+        message: 'The requested establishment does not exist'
+      });
+    }
+
+    // Add favorite status if user is authenticated
+    let establishmentResponse = establishment.toJSON();
+    if (req.user) {
+      const favorite = await Favorite.findOne({
+        where: { userId: req.user.id, establishmentId: establishment.id }
+      });
+      establishmentResponse.isFavorite = !!favorite;
+    }
+
+    res.json({ establishment: establishmentResponse });
+
+  } catch (error) {
+    console.error('Get establishment by slug error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch establishment',
+      message: 'An error occurred while fetching the establishment'
+    });
+  }
+};
+
 const getEstablishmentById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -354,6 +412,7 @@ module.exports = {
   createEstablishment,
   getEstablishments,
   getEstablishmentById,
+  getEstablishmentBySlug,
   updateEstablishment,
   deleteEstablishment,
   getMyEstablishments,

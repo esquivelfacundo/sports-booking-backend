@@ -8,6 +8,7 @@ const {
   getAllEstablishments,
   approveEstablishment,
   rejectEstablishment,
+  updateEstablishmentStatus,
   deleteEstablishmentAdmin,
   getAllUsers,
   suspendUser,
@@ -82,7 +83,49 @@ router.get('/database-status', async (req, res) => {
 router.get('/establishments', authenticateToken, requireRole(['admin', 'superadmin']), getAllEstablishments);
 router.put('/establishments/:id/approve', authenticateToken, requireRole(['admin', 'superadmin']), approveEstablishment);
 router.put('/establishments/:id/reject', authenticateToken, requireRole(['admin', 'superadmin']), rejectEstablishment);
+router.put('/establishments/:id/status', authenticateToken, requireRole(['admin', 'superadmin']), updateEstablishmentStatus);
 router.delete('/establishments/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteEstablishmentAdmin);
+
+// Update establishment custom fee
+router.put('/establishments/:id/fee', authenticateToken, requireRole(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { customFeePercent } = req.body;
+    
+    const { Establishment } = require('../models');
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+    
+    // null means use platform default, otherwise set custom fee
+    // Handle 0 correctly - only treat as null if explicitly null or empty string
+    const feeValue = customFeePercent === null || customFeePercent === '' || customFeePercent === undefined 
+      ? null 
+      : parseFloat(customFeePercent);
+    
+    if (feeValue !== null && (isNaN(feeValue) || feeValue < 0 || feeValue > 100)) {
+      return res.status(400).json({ error: 'Invalid fee percentage (must be 0-100 or null)' });
+    }
+    
+    await establishment.update({ customFeePercent: feeValue });
+    
+    console.log(`[Admin] Updated fee for ${establishment.name}: ${feeValue === null ? 'default' : feeValue + '%'}`);
+    
+    res.json({
+      success: true,
+      establishment: {
+        id: establishment.id,
+        name: establishment.name,
+        customFeePercent: establishment.customFeePercent
+      }
+    });
+  } catch (err) {
+    console.error('Error updating establishment fee:', err);
+    res.status(500).json({ error: 'Error updating fee' });
+  }
+});
 
 // Users management
 router.get('/users', authenticateToken, requireRole(['admin', 'superadmin']), getAllUsers);

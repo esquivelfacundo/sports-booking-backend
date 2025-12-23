@@ -1,15 +1,18 @@
 const express = require('express');
+const crypto = require('crypto');
 const { body, query, validationResult } = require('express-validator');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
 const {
   createEstablishment,
   getEstablishments,
   getEstablishmentById,
+  getEstablishmentBySlug,
   updateEstablishment,
   deleteEstablishment,
   getMyEstablishments,
   getFeaturedEstablishments
 } = require('../controllers/establishmentController');
+const { Establishment } = require('../models');
 
 const router = express.Router();
 
@@ -94,8 +97,8 @@ const updateEstablishmentValidation = [
     .withMessage('City must be between 2 and 50 characters'),
   body('phone')
     .optional()
-    .isMobilePhone()
-    .withMessage('Please provide a valid phone number'),
+    .isLength({ min: 8, max: 20 })
+    .withMessage('Phone must be between 8 and 20 characters'),
   body('email')
     .optional()
     .isEmail()
@@ -159,14 +162,97 @@ const searchValidation = [
     .withMessage('Price range must be $, $$, or $$$')
 ];
 
-// Public routes
+// Public routes (order matters - specific routes before parameterized routes)
 router.get('/', searchValidation, handleValidationErrors, optionalAuth, getEstablishments);
 router.get('/featured', optionalAuth, getFeaturedEstablishments);
-router.get('/:id', optionalAuth, getEstablishmentById);
+router.get('/slug/:slug', optionalAuth, getEstablishmentBySlug);
 
-// Protected routes - require authentication
+// Protected routes - require authentication (must be before /:id to avoid being captured)
+router.get('/me', authenticateToken, requireRole(['establishment', 'admin']), getMyEstablishments);
 router.get('/my/establishments', authenticateToken, requireRole(['establishment', 'admin']), getMyEstablishments);
 router.post('/', authenticateToken, requireRole(['establishment', 'admin']), createEstablishmentValidation, handleValidationErrors, createEstablishment);
+
+// API Key management for WhatsApp bot integration
+router.get('/:id/api-key', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
+  try {
+    const establishment = await Establishment.findByPk(req.params.id);
+    if (!establishment) {
+      return res.status(404).json({ success: false, error: 'Establishment not found' });
+    }
+    
+    // Check ownership
+    if (req.user.role !== 'admin' && establishment.userId !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        hasApiKey: !!establishment.apiKey,
+        apiKey: establishment.apiKey || null
+      }
+    });
+  } catch (error) {
+    console.error('Error getting API key:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+router.post('/:id/api-key/generate', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
+  try {
+    const establishment = await Establishment.findByPk(req.params.id);
+    if (!establishment) {
+      return res.status(404).json({ success: false, error: 'Establishment not found' });
+    }
+    
+    // Check ownership
+    if (req.user.role !== 'admin' && establishment.userId !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    
+    // Generate new API key
+    const apiKey = 'mc_' + crypto.randomBytes(32).toString('hex');
+    await establishment.update({ apiKey });
+    
+    res.json({
+      success: true,
+      data: {
+        apiKey,
+        message: 'API Key generated successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Error generating API key:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+router.delete('/:id/api-key', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
+  try {
+    const establishment = await Establishment.findByPk(req.params.id);
+    if (!establishment) {
+      return res.status(404).json({ success: false, error: 'Establishment not found' });
+    }
+    
+    // Check ownership
+    if (req.user.role !== 'admin' && establishment.userId !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+    
+    await establishment.update({ apiKey: null });
+    
+    res.json({
+      success: true,
+      message: 'API Key deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting API key:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Parameterized routes (must be last)
+router.get('/:id', optionalAuth, getEstablishmentById);
 router.put('/:id', authenticateToken, requireRole(['establishment', 'admin']), updateEstablishmentValidation, handleValidationErrors, updateEstablishment);
 router.delete('/:id', authenticateToken, requireRole(['establishment', 'admin']), deleteEstablishment);
 

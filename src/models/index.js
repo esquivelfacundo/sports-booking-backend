@@ -17,6 +17,27 @@ const Favorite = require('./Favorite')(sequelize, DataTypes);
 const Notification = require('./Notification')(sequelize, DataTypes);
 const Tournament = require('./Tournament')(sequelize, DataTypes);
 const TournamentParticipant = require('./TournamentParticipant')(sequelize, DataTypes);
+const Client = require('./Client')(sequelize, DataTypes);
+const EstablishmentStaff = require('./EstablishmentStaff')(sequelize, DataTypes);
+const ClientDebt = require('./ClientDebt')(sequelize, DataTypes);
+const BookingPayment = require('./BookingPayment')(sequelize, DataTypes);
+const PlatformConfig = require('./PlatformConfig');
+const ProductCategory = require('./ProductCategory')(sequelize, DataTypes);
+const Product = require('./Product')(sequelize, DataTypes);
+const StockMovement = require('./StockMovement')(sequelize, DataTypes);
+const Supplier = require('./Supplier')(sequelize, DataTypes);
+const BookingConsumption = require('./BookingConsumption')(sequelize, DataTypes);
+const Order = require('./Order')(sequelize, DataTypes);
+const OrderItem = require('./OrderItem')(sequelize, DataTypes);
+const OrderPayment = require('./OrderPayment')(sequelize, DataTypes);
+const PaymentMethod = require('./PaymentMethod')(sequelize, DataTypes);
+const ExpenseCategory = require('./ExpenseCategory')(sequelize, DataTypes);
+const CashRegister = require('./CashRegister')(sequelize, DataTypes);
+const CashRegisterMovement = require('./CashRegisterMovement')(sequelize, DataTypes);
+const CurrentAccount = require('./CurrentAccount')(sequelize, DataTypes);
+const CurrentAccountMovement = require('./CurrentAccountMovement')(sequelize, DataTypes);
+const Amenity = require('./Amenity')(sequelize, DataTypes);
+const EstablishmentIntegration = require('./EstablishmentIntegration')(sequelize, DataTypes);
 
 // Define associations
 const defineAssociations = () => {
@@ -40,6 +61,29 @@ const defineAssociations = () => {
   Establishment.hasMany(Favorite, { foreignKey: 'establishmentId', as: 'favorites' });
   Establishment.hasMany(AvailableMatch, { foreignKey: 'establishmentId', as: 'matches' });
   Establishment.hasMany(Tournament, { foreignKey: 'establishmentId', as: 'tournaments' });
+  Establishment.hasMany(Client, { foreignKey: 'establishmentId', as: 'clients' });
+  Establishment.hasMany(EstablishmentStaff, { foreignKey: 'establishmentId', as: 'staff' });
+  Establishment.hasMany(PaymentMethod, { foreignKey: 'establishmentId', as: 'paymentMethods' });
+  Establishment.hasMany(Amenity, { foreignKey: 'establishmentId', as: 'amenitiesBookable' });
+
+  // Amenity associations
+  Amenity.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Amenity.hasMany(Booking, { foreignKey: 'amenityId', as: 'bookings' });
+
+  // EstablishmentIntegration associations
+  EstablishmentIntegration.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  EstablishmentIntegration.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
+  EstablishmentIntegration.belongsTo(User, { foreignKey: 'updatedById', as: 'updatedBy' });
+  Establishment.hasMany(EstablishmentIntegration, { foreignKey: 'establishmentId', as: 'integrations' });
+
+  // PaymentMethod associations
+  PaymentMethod.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+
+  // Client associations
+  Client.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+
+  // EstablishmentStaff associations
+  EstablishmentStaff.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
 
   // Court associations
   Court.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
@@ -54,10 +98,30 @@ const defineAssociations = () => {
   // Booking associations
   Booking.belongsTo(User, { foreignKey: 'userId', as: 'user' });
   Booking.belongsTo(Court, { foreignKey: 'courtId', as: 'court' });
+  Booking.belongsTo(Amenity, { foreignKey: 'amenityId', as: 'amenity' });
   Booking.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Booking.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
   Booking.hasMany(Payment, { foreignKey: 'bookingId', as: 'payments' });
+  Booking.hasMany(BookingPayment, { foreignKey: 'bookingId', as: 'bookingPayments' });
   Booking.hasOne(SplitPayment, { foreignKey: 'bookingId', as: 'splitPayment' });
   Booking.hasMany(Review, { foreignKey: 'bookingId', as: 'reviews' });
+  Booking.hasMany(BookingConsumption, { foreignKey: 'bookingId', as: 'consumptions' });
+  
+  // BookingPayment associations
+  BookingPayment.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  BookingPayment.belongsTo(User, { foreignKey: 'registeredBy', as: 'registeredByUser' });
+  
+  // Client associations
+  Client.hasMany(Booking, { foreignKey: 'clientId', as: 'bookings' });
+  Client.hasMany(ClientDebt, { foreignKey: 'clientId', as: 'debts' });
+
+  // ClientDebt associations
+  ClientDebt.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
+  ClientDebt.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  ClientDebt.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  ClientDebt.belongsTo(Booking, { foreignKey: 'bookingId', as: 'originBooking' });
+  ClientDebt.belongsTo(Booking, { foreignKey: 'paidBookingId', as: 'paidInBooking' });
+  Establishment.hasMany(ClientDebt, { foreignKey: 'establishmentId', as: 'clientDebts' });
 
   // Payment associations
   Payment.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -104,6 +168,100 @@ const defineAssociations = () => {
   TournamentParticipant.belongsTo(Tournament, { foreignKey: 'tournamentId', as: 'tournament' });
   TournamentParticipant.belongsTo(User, { foreignKey: 'userId', as: 'user' });
   User.hasMany(TournamentParticipant, { foreignKey: 'userId', as: 'tournamentParticipations' });
+
+  // Stock management associations
+  // ProductCategory associations
+  ProductCategory.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  ProductCategory.hasMany(Product, { foreignKey: 'categoryId', as: 'products' });
+  Establishment.hasMany(ProductCategory, { foreignKey: 'establishmentId', as: 'productCategories' });
+
+  // Product associations
+  Product.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Product.belongsTo(ProductCategory, { foreignKey: 'categoryId', as: 'category' });
+  Product.hasMany(StockMovement, { foreignKey: 'productId', as: 'movements' });
+  Establishment.hasMany(Product, { foreignKey: 'establishmentId', as: 'products' });
+
+  // StockMovement associations
+  StockMovement.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  StockMovement.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+  StockMovement.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  User.hasMany(StockMovement, { foreignKey: 'userId', as: 'stockMovements' });
+  Establishment.hasMany(StockMovement, { foreignKey: 'establishmentId', as: 'stockMovements' });
+
+  // Supplier associations
+  Supplier.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Establishment.hasMany(Supplier, { foreignKey: 'establishmentId', as: 'suppliers' });
+
+  // BookingConsumption associations
+  BookingConsumption.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  BookingConsumption.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+  BookingConsumption.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  BookingConsumption.belongsTo(User, { foreignKey: 'addedBy', as: 'addedByUser' });
+  BookingConsumption.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  Product.hasMany(BookingConsumption, { foreignKey: 'productId', as: 'consumptions' });
+  User.hasMany(BookingConsumption, { foreignKey: 'addedBy', as: 'addedConsumptions' });
+  Establishment.hasMany(BookingConsumption, { foreignKey: 'establishmentId', as: 'bookingConsumptions' });
+
+  // Order associations
+  Order.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Order.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  Order.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
+  Order.belongsTo(User, { foreignKey: 'createdBy', as: 'createdByUser' });
+  Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items' });
+  Order.hasMany(OrderPayment, { foreignKey: 'orderId', as: 'payments' });
+  Order.hasMany(BookingConsumption, { foreignKey: 'orderId', as: 'consumptions' });
+  Establishment.hasMany(Order, { foreignKey: 'establishmentId', as: 'orders' });
+  Booking.hasMany(Order, { foreignKey: 'bookingId', as: 'orders' });
+  Client.hasMany(Order, { foreignKey: 'clientId', as: 'orders' });
+  User.hasMany(Order, { foreignKey: 'createdBy', as: 'createdOrders' });
+
+  // OrderItem associations
+  OrderItem.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  OrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+  Product.hasMany(OrderItem, { foreignKey: 'productId', as: 'orderItems' });
+
+  // OrderPayment associations
+  OrderPayment.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  OrderPayment.belongsTo(User, { foreignKey: 'registeredBy', as: 'registeredByUser' });
+  User.hasMany(OrderPayment, { foreignKey: 'registeredBy', as: 'registeredOrderPayments' });
+
+  // ExpenseCategory associations
+  ExpenseCategory.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Establishment.hasMany(ExpenseCategory, { foreignKey: 'establishmentId', as: 'expenseCategories' });
+
+  // CashRegister associations
+  CashRegister.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  CashRegister.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  Establishment.hasMany(CashRegister, { foreignKey: 'establishmentId', as: 'cashRegisters' });
+  User.hasMany(CashRegister, { foreignKey: 'userId', as: 'cashRegisters' });
+
+  // CashRegisterMovement associations
+  CashRegisterMovement.belongsTo(CashRegister, { foreignKey: 'cashRegisterId', as: 'cashRegister' });
+  CashRegisterMovement.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  CashRegisterMovement.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  CashRegisterMovement.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  CashRegisterMovement.belongsTo(ExpenseCategory, { foreignKey: 'expenseCategoryId', as: 'expenseCategory' });
+  CashRegisterMovement.belongsTo(User, { foreignKey: 'registeredBy', as: 'registeredByUser' });
+  CashRegister.hasMany(CashRegisterMovement, { foreignKey: 'cashRegisterId', as: 'movements' });
+  User.hasMany(CashRegisterMovement, { foreignKey: 'registeredBy', as: 'cashRegisterMovements' });
+
+  // CurrentAccount associations
+  CurrentAccount.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  CurrentAccount.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
+  CurrentAccount.belongsTo(EstablishmentStaff, { foreignKey: 'staffId', as: 'staff' });
+  CurrentAccount.hasMany(CurrentAccountMovement, { foreignKey: 'currentAccountId', as: 'movements' });
+  Establishment.hasMany(CurrentAccount, { foreignKey: 'establishmentId', as: 'currentAccounts' });
+  Client.hasOne(CurrentAccount, { foreignKey: 'clientId', as: 'currentAccount' });
+  EstablishmentStaff.hasOne(CurrentAccount, { foreignKey: 'staffId', as: 'currentAccount' });
+
+  // CurrentAccountMovement associations
+  CurrentAccountMovement.belongsTo(CurrentAccount, { foreignKey: 'currentAccountId', as: 'currentAccount' });
+  CurrentAccountMovement.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  CurrentAccountMovement.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  CurrentAccountMovement.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  CurrentAccountMovement.belongsTo(User, { foreignKey: 'registeredBy', as: 'registeredByUser' });
+  User.hasMany(CurrentAccountMovement, { foreignKey: 'registeredBy', as: 'currentAccountMovements' });
+  Order.hasMany(CurrentAccountMovement, { foreignKey: 'orderId', as: 'currentAccountMovements' });
 };
 
 // Initialize associations
@@ -125,5 +283,26 @@ module.exports = {
   Favorite,
   Notification,
   Tournament,
-  TournamentParticipant
+  TournamentParticipant,
+  Client,
+  EstablishmentStaff,
+  ClientDebt,
+  BookingPayment,
+  PlatformConfig,
+  ProductCategory,
+  Product,
+  StockMovement,
+  Supplier,
+  BookingConsumption,
+  Order,
+  OrderItem,
+  OrderPayment,
+  PaymentMethod,
+  ExpenseCategory,
+  CashRegister,
+  CashRegisterMovement,
+  CurrentAccount,
+  CurrentAccountMovement,
+  Amenity,
+  EstablishmentIntegration
 };
