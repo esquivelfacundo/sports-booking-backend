@@ -172,6 +172,31 @@ router.get('/me', authenticateToken, requireRole(['establishment', 'admin']), ge
 router.get('/my/establishments', authenticateToken, requireRole(['establishment', 'admin']), getMyEstablishments);
 router.post('/', authenticateToken, requireRole(['establishment', 'admin']), createEstablishmentValidation, handleValidationErrors, createEstablishment);
 
+// Get establishment profile (for owners to check PIN status)
+router.get('/my/profile', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
+  try {
+    const establishment = await Establishment.findOne({
+      where: { userId: req.user.id }
+    });
+    
+    if (!establishment) {
+      return res.status(404).json({ success: false, error: 'Establishment not found' });
+    }
+    
+    res.json({
+      success: true,
+      profile: {
+        id: establishment.id,
+        name: establishment.name,
+        hasPin: !!establishment.pin
+      }
+    });
+  } catch (error) {
+    console.error('Error getting establishment profile:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // API Key management for WhatsApp bot integration
 router.get('/:id/api-key', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
   try {
