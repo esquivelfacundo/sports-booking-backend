@@ -1,69 +1,112 @@
 const { sequelize } = require('../config/database');
 const bcrypt = require('bcryptjs');
 
-async function migrateJuventusToProduction() {
-  console.log('🚀 Iniciando migración de Juventus a producción...\n');
+async function cleanAndRecreateJuventus() {
+  console.log('🚀 Limpiando y recreando establecimiento Juventus...\n');
   
   try {
-    // 1. Obtener o crear usuario principal
-    console.log('1️⃣ Verificando usuario principal...');
-    
-    let userId;
-    const [existingUsers] = await sequelize.query(`
+    // 1. Obtener usuario Juventus
+    console.log('1️⃣ Obteniendo usuario Juventus...');
+    const [users] = await sequelize.query(`
       SELECT id FROM users WHERE email = 'juventus@miscanchas.com'
     `);
     
-    if (existingUsers.length > 0) {
-      userId = existingUsers[0].id;
-      console.log(`✅ Usuario existente encontrado: ${userId}`);
-      
-      // Verificar si ya tiene un establecimiento
-      const [existingEst] = await sequelize.query(`
-        SELECT id FROM establishments WHERE "userId" = '${userId}'
-      `);
-      
-      if (existingEst.length > 0) {
-        console.log(`⚠️  El usuario ya tiene un establecimiento. Abortando migración.`);
-        console.log(`   Para re-ejecutar, primero elimina el establecimiento existente.`);
-        return;
-      }
-    } else {
-      const hashedPassword = await bcrypt.hash('Juventus2024!', 10);
-      const [userResult] = await sequelize.query(`
-        INSERT INTO users (
-          id, email, password, "firstName", "lastName", phone, 
-          "userType", "isActive", "isEmailVerified", "createdAt", "updatedAt"
-        ) VALUES (
-          gen_random_uuid(),
-          'juventus@miscanchas.com',
-          '${hashedPassword}',
-          'Club',
-          'Juventus',
-          '3794123456',
-          'establishment',
-          true,
-          true,
-          NOW(),
-          NOW()
-        )
-        RETURNING id
-      `);
-      userId = userResult[0].id;
-      console.log(`✅ Usuario creado: ${userId}`);
+    if (users.length === 0) {
+      console.log('❌ Usuario juventus@miscanchas.com no encontrado');
+      return;
     }
-    console.log('');
     
-    // 2. Crear establecimiento
-    console.log('2️⃣ Creando establecimiento...');
+    const userId = users[0].id;
+    console.log(`✅ Usuario encontrado: ${userId}\n`);
+    
+    // 2. Obtener establecimiento actual
+    const [establishments] = await sequelize.query(`
+      SELECT id FROM establishments WHERE "userId" = '${userId}'
+    `);
+    
+    if (establishments.length > 0) {
+      const estId = establishments[0].id;
+      console.log('2️⃣ Limpiando datos del establecimiento existente...');
+      
+      // Eliminar en orden correcto (respetando foreign keys)
+      await sequelize.query(`DELETE FROM booking_consumptions WHERE "bookingId" IN (SELECT id FROM bookings WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Consumos de reservas eliminados');
+      
+      await sequelize.query(`DELETE FROM booking_payments WHERE "bookingId" IN (SELECT id FROM bookings WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Pagos de reservas eliminados');
+      
+      await sequelize.query(`DELETE FROM bookings WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Reservas eliminadas');
+      
+      await sequelize.query(`DELETE FROM current_account_movements WHERE "orderId" IN (SELECT id FROM orders WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Movimientos de cuenta corriente (órdenes) eliminados');
+      
+      await sequelize.query(`DELETE FROM order_items WHERE "orderId" IN (SELECT id FROM orders WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Items de órdenes eliminados');
+      
+      await sequelize.query(`DELETE FROM order_payments WHERE "orderId" IN (SELECT id FROM orders WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Pagos de órdenes eliminados');
+      
+      await sequelize.query(`DELETE FROM orders WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Órdenes eliminadas');
+      
+      await sequelize.query(`DELETE FROM stock_movements WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Movimientos de stock eliminados');
+      
+      await sequelize.query(`DELETE FROM products WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Productos eliminados');
+      
+      await sequelize.query(`DELETE FROM product_categories WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Categorías de productos eliminadas');
+      
+      await sequelize.query(`DELETE FROM suppliers WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Proveedores eliminados');
+      
+      await sequelize.query(`DELETE FROM cash_register_movements WHERE "cashRegisterId" IN (SELECT id FROM cash_registers WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Movimientos de caja eliminados');
+      
+      await sequelize.query(`DELETE FROM cash_registers WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Cajas registradoras eliminadas');
+      
+      await sequelize.query(`DELETE FROM current_account_movements WHERE "currentAccountId" IN (SELECT id FROM current_accounts WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Movimientos de cuenta corriente eliminados');
+      
+      await sequelize.query(`DELETE FROM current_accounts WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Cuentas corrientes eliminadas');
+      
+      await sequelize.query(`DELETE FROM client_debts WHERE "clientId" IN (SELECT id FROM clients WHERE "establishmentId" = '${estId}')`);
+      console.log('  ✅ Deudas de clientes eliminadas');
+      
+      await sequelize.query(`DELETE FROM clients WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Clientes eliminados');
+      
+      await sequelize.query(`DELETE FROM establishment_staff WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Staff eliminado');
+      
+      await sequelize.query(`DELETE FROM amenities WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Amenities eliminados');
+      
+      await sequelize.query(`DELETE FROM courts WHERE "establishmentId" = '${estId}'`);
+      console.log('  ✅ Canchas eliminadas');
+      
+      await sequelize.query(`DELETE FROM establishment_integrations WHERE "establishment_id" = '${estId}'`);
+      console.log('  ✅ Integraciones eliminadas');
+      
+      await sequelize.query(`DELETE FROM establishments WHERE id = '${estId}'`);
+      console.log('  ✅ Establecimiento eliminado\n');
+    }
+    
+    // 3. Crear nuevo establecimiento
+    console.log('3️⃣ Creando nuevo establecimiento...');
     const [estResult] = await sequelize.query(`
       INSERT INTO establishments (
         id, "userId", name, slug, description, address, city, phone, email,
-        latitude, longitude, "pricePerHour", "pricePerHour90", "pricePerHour120",
-        "depositPercent", "minDeposit", "openingTime", "closingTime",
-        "isActive", "isVerified", rating, "totalReviews",
+        latitude, longitude, "isActive", "isVerified", rating, "totalReviews",
         "cancellationPolicy", "cancellationDeadlineHours", "refundPercentage",
         "noShowPenalty", "noShowPenaltyType", "noShowPenaltyPercentage",
-        "depositPaymentDeadlineHours",
+        "depositPaymentDeadlineHours", "depositType", "depositPercentage", "depositFixedAmount",
+        "requireDeposit", "allowFullPayment", "allowSameDayBooking",
+        "minAdvanceBookingHours", "maxAdvanceBookingDays",
         "createdAt", "updatedAt"
       ) VALUES (
         gen_random_uuid(),
@@ -77,24 +120,25 @@ async function migrateJuventusToProduction() {
         'info@clubjuventus.com',
         -27.4514,
         -58.9867,
-        25000.00,
-        NULL,
-        NULL,
-        30,
-        5000.00,
-        '08:00',
-        '23:00',
         true,
         true,
         0,
         0,
-        'flexible',
+        'full_refund',
         24,
         100,
         true,
         'deposit_only',
         100,
         2,
+        'percentage',
+        30,
+        5000.00,
+        true,
+        true,
+        true,
+        2,
+        30,
         NOW(),
         NOW()
       )
@@ -104,8 +148,8 @@ async function migrateJuventusToProduction() {
     const establishmentId = estResult[0].id;
     console.log(`✅ Establecimiento creado: ${establishmentId}\n`);
     
-    // 3. Crear canchas
-    console.log('3️⃣ Creando canchas...');
+    // 4. Crear canchas
+    console.log('4️⃣ Creando canchas...');
     
     const courts = [
       { name: 'Cancha #1', sport: 'futbol', surface: 'synthetic', isIndoor: true, capacity: 10, price: 25000, description: 'Cancha de fútbol 5 techada con iluminación LED' },
@@ -142,8 +186,8 @@ async function migrateJuventusToProduction() {
     }
     console.log('');
     
-    // 4. Crear amenity (Quincho)
-    console.log('4️⃣ Creando amenities...');
+    // 5. Crear amenity (Quincho)
+    console.log('5️⃣ Creando amenities...');
     await sequelize.query(`
       INSERT INTO amenities (
         id, "establishmentId", name, description, icon, "pricePerHour",
@@ -167,8 +211,8 @@ async function migrateJuventusToProduction() {
     `);
     console.log('  ✅ Quincho creado\n');
     
-    // 5. Crear staff
-    console.log('5️⃣ Creando personal del establecimiento...');
+    // 6. Crear staff
+    console.log('6️⃣ Creando personal del establecimiento...');
     
     const staffMembers = [
       {
@@ -251,10 +295,9 @@ async function migrateJuventusToProduction() {
     }
     console.log('');
     
-    // 6. Limpiar datos de testing
-    console.log('6️⃣ Limpiando datos de testing...');
+    // 7. Limpiar datos de testing de otros establecimientos
+    console.log('7️⃣ Limpiando datos de testing de otros establecimientos...');
     
-    // Eliminar reservas de testing
     await sequelize.query(`
       DELETE FROM bookings 
       WHERE "establishmentId" IN (
@@ -263,7 +306,6 @@ async function migrateJuventusToProduction() {
     `);
     console.log('  ✅ Reservas de testing eliminadas');
     
-    // Eliminar clientes de testing
     await sequelize.query(`
       DELETE FROM clients 
       WHERE "establishmentId" IN (
@@ -272,7 +314,6 @@ async function migrateJuventusToProduction() {
     `);
     console.log('  ✅ Clientes de testing eliminados');
     
-    // Eliminar movimientos de stock de testing
     await sequelize.query(`
       DELETE FROM stock_movements 
       WHERE "establishmentId" IN (
@@ -281,7 +322,6 @@ async function migrateJuventusToProduction() {
     `);
     console.log('  ✅ Movimientos de stock de testing eliminados');
     
-    // Eliminar productos de testing
     await sequelize.query(`
       DELETE FROM products 
       WHERE "establishmentId" IN (
@@ -290,40 +330,12 @@ async function migrateJuventusToProduction() {
     `);
     console.log('  ✅ Productos de testing eliminados');
     
-    // Eliminar órdenes de testing
-    await sequelize.query(`
-      DELETE FROM orders 
-      WHERE "establishmentId" IN (
-        SELECT id FROM establishments WHERE email LIKE '%prueba%' OR email LIKE '%test%'
-      )
-    `);
-    console.log('  ✅ Órdenes de testing eliminadas');
-    
-    // Eliminar movimientos de caja de testing
-    await sequelize.query(`
-      DELETE FROM cash_register_movements 
-      WHERE "cashRegisterId" IN (
-        SELECT id FROM cash_registers WHERE "establishmentId" IN (
-          SELECT id FROM establishments WHERE email LIKE '%prueba%' OR email LIKE '%test%'
-        )
-      )
-    `);
-    console.log('  ✅ Movimientos de caja de testing eliminados');
-    
-    // Eliminar cajas de testing
-    await sequelize.query(`
-      DELETE FROM cash_registers 
-      WHERE "establishmentId" IN (
-        SELECT id FROM establishments WHERE email LIKE '%prueba%' OR email LIKE '%test%'
-      )
-    `);
-    console.log('  ✅ Cajas registradoras de testing eliminadas');
-    
     console.log('\n✅ ¡Migración completada exitosamente!\n');
     console.log('📋 Resumen:');
     console.log(`   Usuario: juventus@miscanchas.com`);
-    console.log(`   Password: Juventus2024!`);
+    console.log(`   Password: (sin cambios)`);
     console.log(`   Establecimiento: Club Juventus`);
+    console.log(`   ID: ${establishmentId}`);
     console.log(`   Canchas: 6 canchas de fútbol`);
     console.log(`   Amenities: 1 quincho`);
     console.log(`   Staff: 3 miembros (admin, gerente, recepcionista)`);
@@ -332,6 +344,7 @@ async function migrateJuventusToProduction() {
     console.log('   Gerente: gerente@clubjuventus.com / Gerente2024!');
     console.log('   Recepción: recepcion@clubjuventus.com / Recepcion2024!');
     console.log('\n⚠️  IMPORTANTE: Las imágenes deben subirse manualmente desde la interfaz');
+    console.log('\n🔗 Cloudinary configurado para almacenamiento de imágenes en producción');
     
   } catch (error) {
     console.error('❌ Error en la migración:', error);
@@ -343,7 +356,7 @@ async function migrateJuventusToProduction() {
 
 // Ejecutar si se llama directamente
 if (require.main === module) {
-  migrateJuventusToProduction()
+  cleanAndRecreateJuventus()
     .then(() => process.exit(0))
     .catch(err => {
       console.error(err);
@@ -351,4 +364,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = migrateJuventusToProduction;
+module.exports = cleanAndRecreateJuventus;
