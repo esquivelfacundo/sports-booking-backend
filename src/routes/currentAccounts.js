@@ -326,7 +326,7 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
     const { establishmentId } = req.params;
     const { useCostPrice = true, discountPercentage = 0 } = req.body;
 
-    // Get all staff without current accounts
+    // Get all active staff for this establishment
     const staff = await EstablishmentStaff.findAll({
       where: { establishmentId, isActive: true },
       include: [{
@@ -336,7 +336,24 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
       }]
     });
 
+    console.log(`[CurrentAccounts] Found ${staff.length} active staff members for establishment ${establishmentId}`);
+
+    // Filter staff without accounts
     const staffWithoutAccounts = staff.filter(s => !s.currentAccount);
+    
+    console.log(`[CurrentAccounts] ${staffWithoutAccounts.length} staff members without accounts`);
+
+    if (staffWithoutAccounts.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: staff.length === 0 
+          ? 'No hay empleados registrados en el establecimiento' 
+          : 'Todos los empleados ya tienen cuenta corriente',
+        data: [],
+        totalStaff: staff.length,
+        staffWithAccounts: staff.length
+      });
+    }
 
     const createdAccounts = [];
     for (const staffMember of staffWithoutAccounts) {
@@ -356,7 +373,9 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
     res.json({ 
       success: true, 
       message: `Se crearon ${createdAccounts.length} cuentas corrientes para empleados`,
-      data: createdAccounts 
+      data: createdAccounts,
+      totalStaff: staff.length,
+      staffWithAccounts: staff.length - staffWithoutAccounts.length + createdAccounts.length
     });
   } catch (error) {
     console.error('Error auto-creating staff accounts:', error);
