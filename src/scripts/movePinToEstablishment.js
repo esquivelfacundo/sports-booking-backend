@@ -6,7 +6,7 @@
 require('dotenv').config();
 const { sequelize, User, Establishment } = require('../models');
 
-const JUVENTUS_EMAIL = 'juventus@miscanchas.com';
+const JUVENTUS_EMAIL = 'juventuspadelfutbol@gmail.com';
 
 async function movePin() {
   try {
@@ -42,11 +42,12 @@ async function movePin() {
 
     // Mover el PIN de User a Establishment
     if (user.pin) {
-      await establishment.update({ pin: user.pin });
+      const pinToMove = user.pin;
+      await establishment.update({ pin: pinToMove });
       await user.update({ pin: null });
       
       console.log(`\n✅ PIN movido exitosamente de User a Establishment`);
-      console.log(`  Nuevo PIN del establecimiento: ${user.pin}`);
+      console.log(`  Nuevo PIN del establecimiento: ${pinToMove}`);
     } else {
       console.log('\n⚠️  El usuario no tiene PIN configurado en la tabla User');
     }

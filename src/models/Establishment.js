@@ -264,6 +264,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       unique: true,
       comment: 'API Key for external integrations like WhatsApp bot'
+    },
+    
+    // Security PIN for owner operations
+    pin: {
+      type: DataTypes.STRING(4),
+      allowNull: true,
+      validate: {
+        is: /^[0-9]{4}$/
+      },
+      comment: 'Security PIN for owner operations (4 digits)'
     }
   }, {
     tableName: 'establishments',
