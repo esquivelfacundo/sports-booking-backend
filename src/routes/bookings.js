@@ -253,6 +253,143 @@ router.get('/establishment/:establishmentId',
   getEstablishmentBookings
 );
 
+/**
+ * GET /api/bookings/establishment/:establishmentId/stats
+ * Get aggregated statistics for an establishment - optimized endpoint
+ * Returns: todayBookings, todayRevenue, monthlyRevenue, totalClients, pendingBookings, confirmedBookings, cancelledBookings
+ */
+router.get('/establishment/:establishmentId/stats', 
+  requireRole(['establishment', 'admin']), 
+  async (req, res) => {
+    try {
+      const { establishmentId } = req.params;
+      const { Op, fn, col, literal } = require('sequelize');
+      const { Client } = require('../models');
+      
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      
+      // Get first and last day of current month
+      const firstDayOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
+
+      // Execute all queries in parallel for better performance
+      const [
+        todayStats,
+        monthlyRevenue,
+        statusCounts,
+        totalClients
+      ] = await Promise.all([
+        // Today's bookings and revenue
+        Booking.findAll({
+          where: {
+            establishmentId,
+            date: today
+          },
+          attributes: [
+            [fn('COUNT', col('id')), 'count'],
+            [fn('SUM', literal("CASE WHEN status = 'completed' THEN CAST(\"totalAmount\" AS DECIMAL) ELSE 0 END")), 'revenue']
+          ],
+          raw: true
+        }),
+        
+        // Monthly revenue (completed bookings only)
+        Booking.findAll({
+          where: {
+            establishmentId,
+            date: {
+              [Op.between]: [firstDayOfMonth, lastDayOfMonth]
+            },
+            status: 'completed'
+          },
+          attributes: [
+            [fn('SUM', col('totalAmount')), 'total']
+          ],
+          raw: true
+        }),
+        
+        // Status counts (all time)
+        Booking.findAll({
+          where: { establishmentId },
+          attributes: [
+            'status',
+            [fn('COUNT', col('id')), 'count']
+          ],
+          group: ['status'],
+          raw: true
+        }),
+        
+        // Total unique clients
+        Client.count({
+          where: { establishmentId }
+        })
+      ]);
+
+      // Process status counts
+      const statusMap = {};
+      statusCounts.forEach(s => {
+        statusMap[s.status] = parseInt(s.count) || 0;
+      });
+
+      const stats = {
+        todayBookings: parseInt(todayStats[0]?.count) || 0,
+        todayRevenue: parseFloat(todayStats[0]?.revenue) || 0,
+        monthlyRevenue: parseFloat(monthlyRevenue[0]?.total) || 0,
+        totalClients: totalClients || 0,
+        occupancyRate: 0, // TODO: Calculate based on available slots
+        pendingBookings: statusMap['pending'] || 0,
+        confirmedBookings: statusMap['confirmed'] || 0,
+        cancelledBookings: statusMap['cancelled'] || 0,
+        completedBookings: statusMap['completed'] || 0,
+        inProgressBookings: statusMap['in_progress'] || 0,
+        noShowBookings: statusMap['no_show'] || 0
+      };
+
+      res.json({
+        success: true,
+        stats
+      });
+    } catch (error) {
+      console.error('Error fetching establishment stats:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al obtener estadísticas',
+        message: error.message
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/bookings/establishment/:establishmentId/count
+ * Get total booking count for an establishment
+ */
+router.get('/establishment/:establishmentId/count', 
+  requireRole(['establishment', 'admin']), 
+  async (req, res) => {
+    try {
+      const { establishmentId } = req.params;
+      
+      const count = await Booking.count({
+        where: { establishmentId }
+      });
+
+      res.json({
+        success: true,
+        count
+      });
+    } catch (error) {
+      console.error('Error fetching booking count:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Error al obtener conteo de reservas'
+      });
+    }
+  }
+);
+
 // Check recurring availability (for recurring bookings)
 router.post('/check-recurring-availability', checkRecurringAvailability);
 
