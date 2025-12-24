@@ -57,14 +57,20 @@ app.use(cors(corsOptions));
 // Rate limiting - more permissive for SPA applications
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 1 * 60 * 1000, // 1 minute
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 1000 : 300), // 1000 in dev, 300 in prod
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 2000 : 500), // 2000 in dev, 500 in prod
   message: {
     error: 'Demasiadas solicitudes. Por favor, espera un momento antes de intentar de nuevo.',
     code: 'TOO_MANY_REQUESTS'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => process.env.NODE_ENV === 'development' // Skip rate limiting in development
+  skip: (req) => process.env.NODE_ENV === 'development', // Skip rate limiting in development
+  keyGenerator: (req) => {
+    // Use a combination of IP and user ID if authenticated for better rate limiting
+    const userId = req.user?.id || 'anonymous';
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    return `${ip}-${userId}`;
+  }
 });
 
 app.use('/api/', limiter);
