@@ -529,6 +529,10 @@ const updateBooking = async (req, res) => {
         updateData.cancellationReason = req.body.cancellationReason;
       } else if (status === 'completed') {
         updateData.completedAt = new Date();
+        // Generate review token for completed bookings
+        if (!booking.reviewToken) {
+          updateData.reviewToken = crypto.randomBytes(32).toString('hex');
+        }
       } else if (status === 'in_progress') {
         updateData.startedAt = new Date();
         

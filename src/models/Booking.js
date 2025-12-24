@@ -181,6 +181,18 @@ module.exports = (sequelize, DataTypes) => {
     checkInCode: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    // Review token for unique review link
+    reviewToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+      comment: 'Unique token for review link - generated when booking is completed'
+    },
+    reviewedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'When the review was submitted for this booking'
     }
   }, {
     tableName: 'bookings',
@@ -213,6 +225,10 @@ module.exports = (sequelize, DataTypes) => {
       {
         unique: true,
         fields: ['courtId', 'date', 'startTime']
+      },
+      {
+        unique: true,
+        fields: ['reviewToken']
       }
     ]
   });

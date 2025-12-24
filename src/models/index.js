@@ -38,6 +38,8 @@ const CurrentAccount = require('./CurrentAccount')(sequelize, DataTypes);
 const CurrentAccountMovement = require('./CurrentAccountMovement')(sequelize, DataTypes);
 const Amenity = require('./Amenity')(sequelize, DataTypes);
 const EstablishmentIntegration = require('./EstablishmentIntegration')(sequelize, DataTypes);
+const Coupon = require('./Coupon')(sequelize, DataTypes);
+const CouponUsage = require('./CouponUsage')(sequelize, DataTypes);
 
 // Define associations
 const defineAssociations = () => {
@@ -262,6 +264,17 @@ const defineAssociations = () => {
   CurrentAccountMovement.belongsTo(User, { foreignKey: 'registeredBy', as: 'registeredByUser' });
   User.hasMany(CurrentAccountMovement, { foreignKey: 'registeredBy', as: 'currentAccountMovements' });
   Order.hasMany(CurrentAccountMovement, { foreignKey: 'orderId', as: 'currentAccountMovements' });
+
+  // Coupon associations
+  Coupon.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Establishment.hasMany(Coupon, { foreignKey: 'establishmentId', as: 'coupons' });
+  
+  CouponUsage.belongsTo(Coupon, { foreignKey: 'couponId', as: 'coupon' });
+  CouponUsage.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  CouponUsage.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  CouponUsage.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
+  Coupon.hasMany(CouponUsage, { foreignKey: 'couponId', as: 'usages' });
+  Booking.hasMany(CouponUsage, { foreignKey: 'bookingId', as: 'couponUsages' });
 };
 
 // Initialize associations
@@ -304,5 +317,7 @@ module.exports = {
   CurrentAccount,
   CurrentAccountMovement,
   Amenity,
-  EstablishmentIntegration
+  EstablishmentIntegration,
+  Coupon,
+  CouponUsage
 };

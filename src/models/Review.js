@@ -58,8 +58,22 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: []
     },
     aspects: {
-      type: DataTypes.JSON, // {facilities: 5, staff: 4, cleanliness: 5, value: 4}
+      type: DataTypes.JSON, // {courtCondition: 5, cleanliness: 4, customerService: 5, valueForMoney: 4, punctuality: 5}
       defaultValue: {}
+    },
+    // NPS Score (0-10): Would you recommend this place?
+    npsScore: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: {
+        min: 0,
+        max: 10
+      }
+    },
+    // Source of the review
+    source: {
+      type: DataTypes.ENUM('app', 'qr_ticket', 'email_link', 'whatsapp_link', 'manual'),
+      defaultValue: 'app'
     },
     isVerified: {
       type: DataTypes.BOOLEAN,

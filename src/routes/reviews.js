@@ -7,7 +7,12 @@ const {
   createReview,
   updateReview,
   deleteReview,
-  getUserReviews
+  getUserReviews,
+  getBookingByReviewToken,
+  createReviewByToken,
+  generateBookingReviewToken,
+  getEstablishmentReviewStats,
+  respondToReview
 } = require('../controllers/reviewController');
 
 const router = express.Router();
@@ -37,8 +42,13 @@ const updateReviewValidation = [
   body('comment').optional().isLength({ max: 1000 }).withMessage('Comment max 1000 characters')
 ];
 
+// Public routes - Review by token (no auth required)
+router.get('/token/:token', getBookingByReviewToken);
+router.post('/token/:token', createReviewByToken);
+
 // Public routes
 router.get('/establishment/:establishmentId', optionalAuth, getEstablishmentReviews);
+router.get('/establishment/:establishmentId/stats', optionalAuth, getEstablishmentReviewStats);
 router.get('/user/:userId', optionalAuth, getUserReviews);
 router.get('/:id', optionalAuth, getReviewById);
 
@@ -46,5 +56,9 @@ router.get('/:id', optionalAuth, getReviewById);
 router.post('/', authenticateToken, createReviewValidation, handleValidationErrors, createReview);
 router.put('/:id', authenticateToken, updateReviewValidation, handleValidationErrors, updateReview);
 router.delete('/:id', authenticateToken, deleteReview);
+
+// Establishment routes
+router.post('/:id/respond', authenticateToken, respondToReview);
+router.post('/booking/:bookingId/generate-token', authenticateToken, generateBookingReviewToken);
 
 module.exports = router;
