@@ -92,8 +92,8 @@ async function sendBookingConfirmation(booking, establishment, court) {
 
   const subject = `Reserva confirmada · ${courtName} · ${formatDate(date)}`;
 
-  // Logo URL - hosted on the platform (light theme logo)
-  const logoUrl = 'https://www.miscanchas.com/assets/logos/logo-light.svg';
+  // Logo URL - hosted on the platform (PNG for better email compatibility)
+  const logoUrl = 'https://www.miscanchas.com/assets/mc-logo.png';
 
   // Generate QR URL for email - use PNG endpoint (emails need direct image URL)
   let qrImageUrl = null;
