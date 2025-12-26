@@ -295,6 +295,8 @@ async function createBookingFromPayment(paymentData) {
       clientPhone: metadata.clientPhone || '',
       checkInCode: checkInCode,
       confirmedAt: new Date(),
+      paidAt: new Date(),
+      mpPaymentId: paymentData.id?.toString(),
       notes: isFullPayment 
         ? `Pago completo: $${fullPrice} + Tarifa servicio: $${serviceFee} - MP ID: ${paymentData.id}`
         : `Seña pagada: $${depositForEstablishment} (${metadata.depositPercent || 50}%) + Tarifa servicio: $${serviceFee} - MP ID: ${paymentData.id}`

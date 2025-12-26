@@ -185,8 +185,8 @@ async function createSplitPreference(options, seller, marketplaceFee = null) {
         failure: backUrls.failure || backUrls.success,
         pending: backUrls.pending || backUrls.success,
       } : undefined,
-      // Only set auto_return if back_urls are HTTPS (MP requirement for production)
-      auto_return: (backUrls && backUrls.success && backUrls.success.startsWith('https://')) ? 'approved' : undefined,
+      // Always set auto_return when back_urls are provided
+      auto_return: (backUrls && backUrls.success) ? 'approved' : undefined,
       external_reference: externalReference || `ORDER-${Date.now()}`,
       notification_url: notificationUrl,
       // Metadata for booking creation

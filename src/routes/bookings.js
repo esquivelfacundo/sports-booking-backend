@@ -225,6 +225,39 @@ router.get('/by-reference/:reference', async (req, res) => {
 });
 
 /**
+ * GET /api/bookings/public/:bookingId
+ * Get booking details - PUBLIC (for confirmation page)
+ */
+router.get('/public/:bookingId', async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    const booking = await Booking.findByPk(bookingId, {
+      include: [
+        {
+          model: Court,
+          as: 'court',
+          include: [{
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'slug', 'address', 'city', 'phone']
+          }]
+        }
+      ]
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Reserva no encontrada' });
+    }
+
+    res.json(booking);
+  } catch (error) {
+    console.error('Error fetching booking:', error);
+    res.status(500).json({ error: 'Error al obtener reserva' });
+  }
+});
+
+/**
  * GET /api/bookings/:bookingId/qr.png
  * Serve QR code as PNG image (for email embedding) - PUBLIC
  */

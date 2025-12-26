@@ -337,8 +337,10 @@ const createBooking = async (req, res) => {
 const getBookings = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { page = 1, limit = 10, status, startDate, endDate } = req.query;
+    const { page = 1, limit = 100, status, startDate, endDate } = req.query;
     const offset = (page - 1) * limit;
+
+    console.log(`[getBookings] Fetching bookings for user: ${userId}`);
 
     const where = { userId };
 
@@ -385,6 +387,11 @@ const getBookings = async (req, res) => {
       offset,
       order: [['date', 'DESC'], ['startTime', 'DESC']]
     });
+
+    console.log(`[getBookings] Found ${count} bookings`);
+    if (bookings.length > 0) {
+      console.log(`[getBookings] First booking courtId: ${bookings[0].courtId}, court: ${bookings[0].court?.name || 'NULL'}`);
+    }
 
     res.json({
       bookings,
