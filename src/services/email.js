@@ -98,9 +98,9 @@ async function sendBookingConfirmation(booking, establishment, court) {
   // Generate QR URL for email - use PNG endpoint (emails need direct image URL)
   let qrImageUrl = null;
   if (bookingId) {
-    // Use production API URL for emails
+    // Use production URL for emails - everything goes through miscanchas.com
     const backendUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://api.miscanchas.com'
+      ? 'https://www.miscanchas.com'
       : (process.env.NGROK_URL || 'http://localhost:8001');
     // Use .png endpoint which returns image directly (not JSON)
     qrImageUrl = `${backendUrl}/api/bookings/${bookingId}/qr.png`;
