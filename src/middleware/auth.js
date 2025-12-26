@@ -6,7 +6,7 @@ const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    if (!token) {
+    if (!token || token === 'null' || token === 'undefined') {
       return res.status(401).json({
         error: 'Access denied',
         message: 'No token provided'
@@ -108,10 +108,10 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    console.error('Authentication middleware error:', error);
-    return res.status(500).json({
+    console.error('Authentication middleware error:', error.name, error.message);
+    return res.status(401).json({
       error: 'Authentication error',
-      message: 'Failed to authenticate token'
+      message: error.message || 'Failed to authenticate token'
     });
   }
 };
