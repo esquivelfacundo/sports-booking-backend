@@ -116,6 +116,114 @@ const queryValidation = [
 // Public/Optional Auth Routes (before auth middleware)
 // ============================================
 
+// IMPORTANT: Static routes must come BEFORE dynamic :bookingId routes
+
+/**
+ * GET /api/bookings/by-payment/:paymentId
+ * Find booking by MercadoPago payment ID - PUBLIC
+ */
+router.get('/by-payment/:paymentId', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+
+    // Find booking that has this payment
+    const booking = await Booking.findOne({
+      where: {
+        [Op.or]: [
+          { mpPaymentId: paymentId },
+          { '$payments.mpPaymentId$': paymentId }
+        ]
+      },
+      include: [
+        {
+          model: Court,
+          as: 'court',
+          include: [{
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'slug', 'address']
+          }]
+        },
+        {
+          model: BookingPayment,
+          as: 'payments',
+          required: false
+        }
+      ]
+    });
+
+    if (!booking) {
+      // Try finding by payment record
+      const payment = await BookingPayment.findOne({
+        where: { mpPaymentId: paymentId },
+        include: [{
+          model: Booking,
+          as: 'booking',
+          include: [{
+            model: Court,
+            as: 'court',
+            include: [{
+              model: Establishment,
+              as: 'establishment',
+              attributes: ['id', 'name', 'slug', 'address']
+            }]
+          }]
+        }]
+      });
+
+      if (payment && payment.booking) {
+        return res.json(payment.booking);
+      }
+
+      return res.status(404).json({ error: 'Reserva no encontrada' });
+    }
+
+    res.json(booking);
+  } catch (error) {
+    console.error('Error finding booking by payment:', error);
+    res.status(500).json({ error: 'Error al buscar reserva' });
+  }
+});
+
+/**
+ * GET /api/bookings/by-reference/:reference
+ * Find booking by external reference (preference ID or other reference) - PUBLIC
+ */
+router.get('/by-reference/:reference', async (req, res) => {
+  try {
+    const { reference } = req.params;
+
+    const booking = await Booking.findOne({
+      where: {
+        [Op.or]: [
+          { externalReference: reference },
+          { mpPreferenceId: reference }
+        ]
+      },
+      include: [
+        {
+          model: Court,
+          as: 'court',
+          include: [{
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'slug', 'address']
+          }]
+        }
+      ]
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Reserva no encontrada' });
+    }
+
+    res.json(booking);
+  } catch (error) {
+    console.error('Error finding booking by reference:', error);
+    res.status(500).json({ error: 'Error al buscar reserva' });
+  }
+});
+
 /**
  * GET /api/bookings/:bookingId/qr.png
  * Serve QR code as PNG image (for email embedding) - PUBLIC
@@ -663,112 +771,6 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error getting payments:', error);
     res.status(500).json({ error: 'Error al obtener los pagos' });
-  }
-});
-
-/**
- * GET /api/bookings/by-payment/:paymentId
- * Find booking by MercadoPago payment ID
- */
-router.get('/by-payment/:paymentId', async (req, res) => {
-  try {
-    const { paymentId } = req.params;
-
-    // Find booking that has this payment
-    const booking = await Booking.findOne({
-      where: {
-        [Op.or]: [
-          { mpPaymentId: paymentId },
-          { '$payments.mpPaymentId$': paymentId }
-        ]
-      },
-      include: [
-        {
-          model: Court,
-          as: 'court',
-          include: [{
-            model: Establishment,
-            as: 'establishment',
-            attributes: ['id', 'name', 'slug', 'address']
-          }]
-        },
-        {
-          model: BookingPayment,
-          as: 'payments',
-          required: false
-        }
-      ]
-    });
-
-    if (!booking) {
-      // Try finding by payment record
-      const payment = await BookingPayment.findOne({
-        where: { mpPaymentId: paymentId },
-        include: [{
-          model: Booking,
-          as: 'booking',
-          include: [{
-            model: Court,
-            as: 'court',
-            include: [{
-              model: Establishment,
-              as: 'establishment',
-              attributes: ['id', 'name', 'slug', 'address']
-            }]
-          }]
-        }]
-      });
-
-      if (payment && payment.booking) {
-        return res.json(payment.booking);
-      }
-
-      return res.status(404).json({ error: 'Reserva no encontrada' });
-    }
-
-    res.json(booking);
-  } catch (error) {
-    console.error('Error finding booking by payment:', error);
-    res.status(500).json({ error: 'Error al buscar reserva' });
-  }
-});
-
-/**
- * GET /api/bookings/by-reference/:reference
- * Find booking by external reference (preference ID or other reference)
- */
-router.get('/by-reference/:reference', async (req, res) => {
-  try {
-    const { reference } = req.params;
-
-    const booking = await Booking.findOne({
-      where: {
-        [Op.or]: [
-          { externalReference: reference },
-          { mpPreferenceId: reference }
-        ]
-      },
-      include: [
-        {
-          model: Court,
-          as: 'court',
-          include: [{
-            model: Establishment,
-            as: 'establishment',
-            attributes: ['id', 'name', 'slug', 'address']
-          }]
-        }
-      ]
-    });
-
-    if (!booking) {
-      return res.status(404).json({ error: 'Reserva no encontrada' });
-    }
-
-    res.json(booking);
-  } catch (error) {
-    console.error('Error finding booking by reference:', error);
-    res.status(500).json({ error: 'Error al buscar reserva' });
   }
 });
 
