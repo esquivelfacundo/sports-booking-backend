@@ -13,6 +13,7 @@ const {
   getFeaturedEstablishments
 } = require('../controllers/establishmentController');
 const { Establishment } = require('../models');
+const { sequelize } = require('../config/database');
 
 const router = express.Router();
 
@@ -171,6 +172,107 @@ router.get('/slug/:slug', optionalAuth, getEstablishmentBySlug);
 router.get('/me', authenticateToken, requireRole(['establishment', 'admin']), getMyEstablishments);
 router.get('/my/establishments', authenticateToken, requireRole(['establishment', 'admin']), getMyEstablishments);
 router.post('/', authenticateToken, requireRole(['establishment', 'admin']), createEstablishmentValidation, handleValidationErrors, createEstablishment);
+
+// Registration wizard endpoint - handles the full registration flow
+router.post('/register', authenticateToken, async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const userId = req.user.id;
+    const {
+      basicInfo,
+      location,
+      schedule,
+      amenities,
+      images,
+      courts,
+      staff,
+      representative
+    } = req.body;
+
+    // Check if user already has an establishment
+    const existingEstablishment = await Establishment.findOne({
+      where: { userId },
+      transaction
+    });
+
+    if (existingEstablishment) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Ya tienes un establecimiento registrado'
+      });
+    }
+
+    // Extract coordinates from location
+    const latitude = location?.coordinates?.lat || null;
+    const longitude = location?.coordinates?.lng || null;
+
+    // Create the establishment
+    const establishment = await Establishment.create({
+      userId,
+      name: basicInfo?.name || '',
+      description: basicInfo?.description || '',
+      phone: basicInfo?.phone || '',
+      email: basicInfo?.email || '',
+      address: location?.address || '',
+      city: location?.city || '',
+      latitude,
+      longitude,
+      amenities: amenities || [],
+      openingHours: schedule || {},
+      images: images?.photos || [],
+      isActive: true,
+      isVerified: false
+    }, { transaction });
+
+    // Create courts if provided
+    if (courts && courts.length > 0) {
+      const { Court } = require('../models');
+      for (const court of courts) {
+        await Court.create({
+          establishmentId: establishment.id,
+          name: court.name,
+          sport: court.sport,
+          surfaceType: court.surfaceType || 'synthetic',
+          isIndoor: court.isIndoor || false,
+          hasLighting: court.hasLighting || true,
+          pricePerHour: court.pricePerHour || 0,
+          isActive: true
+        }, { transaction });
+      }
+    }
+
+    // Update user role to establishment if not already
+    const { User } = require('../models');
+    await User.update(
+      { userType: 'establishment' },
+      { where: { id: userId }, transaction }
+    );
+
+    await transaction.commit();
+
+    res.status(201).json({
+      success: true,
+      message: 'Establecimiento registrado exitosamente',
+      establishment: {
+        id: establishment.id,
+        name: establishment.name,
+        slug: establishment.slug
+      },
+      status: 'pending_verification'
+    });
+
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error registering establishment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al registrar el establecimiento',
+      error: error.message
+    });
+  }
+});
 
 // Get establishment profile (for owners to check PIN status)
 router.get('/my/profile', authenticateToken, requireRole(['establishment', 'admin']), async (req, res) => {
