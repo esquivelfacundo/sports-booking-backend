@@ -92,17 +92,18 @@ async function sendBookingConfirmation(booking, establishment, court) {
 
   const subject = `Reserva confirmada · ${courtName} · ${formatDate(date)}`;
 
-  // Logo URL - hosted on the platform
-  const logoUrl = 'https://www.miscanchas.com/assets/logo-3.png';
+  // Logo URL - hosted on the platform (light theme logo)
+  const logoUrl = 'https://www.miscanchas.com/assets/logos/logo-light.svg';
 
-  // Generate QR URL for email (use external URL, not base64 - Gmail blocks base64)
+  // Generate QR URL for email - use PNG endpoint (emails need direct image URL)
   let qrImageUrl = null;
-  if (bookingId && checkInCode) {
+  if (bookingId) {
     // Use production API URL for emails
     const backendUrl = process.env.NODE_ENV === 'production' 
       ? 'https://api.miscanchas.com'
       : (process.env.NGROK_URL || 'http://localhost:8001');
-    qrImageUrl = `${backendUrl}/api/bookings/${bookingId}/qr.png?code=${checkInCode}`;
+    // Use .png endpoint which returns image directly (not JSON)
+    qrImageUrl = `${backendUrl}/api/bookings/${bookingId}/qr.png`;
   }
 
   // Confirmation page URL
