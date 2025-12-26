@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
+const { Op } = require('sequelize');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
 const qrService = require('../services/qrcode');
 const { Booking, Court, Establishment, BookingPayment } = require('../models');
@@ -125,15 +126,11 @@ const queryValidation = [
 router.get('/by-payment/:paymentId', async (req, res) => {
   try {
     const { paymentId } = req.params;
+    console.log(`[by-payment] Looking for booking with mpPaymentId: ${paymentId}`);
 
-    // Find booking that has this payment
+    // Find booking by mpPaymentId directly
     const booking = await Booking.findOne({
-      where: {
-        [Op.or]: [
-          { mpPaymentId: paymentId },
-          { '$payments.mpPaymentId$': paymentId }
-        ]
-      },
+      where: { mpPaymentId: paymentId },
       include: [
         {
           model: Court,
@@ -141,44 +138,44 @@ router.get('/by-payment/:paymentId', async (req, res) => {
           include: [{
             model: Establishment,
             as: 'establishment',
-            attributes: ['id', 'name', 'slug', 'address']
+            attributes: ['id', 'name', 'slug', 'address', 'city']
           }]
-        },
-        {
-          model: BookingPayment,
-          as: 'payments',
-          required: false
         }
       ]
     });
 
-    if (!booking) {
-      // Try finding by payment record
-      const payment = await BookingPayment.findOne({
-        where: { mpPaymentId: paymentId },
-        include: [{
-          model: Booking,
-          as: 'booking',
-          include: [{
+    if (booking) {
+      console.log(`[by-payment] Found booking: ${booking.id}`);
+      return res.json(booking);
+    }
+
+    // If not found by mpPaymentId, try BookingPayment table
+    const payment = await BookingPayment.findOne({
+      where: { mpPaymentId: paymentId }
+    });
+
+    if (payment && payment.bookingId) {
+      console.log(`[by-payment] Found via BookingPayment, bookingId: ${payment.bookingId}`);
+      const bookingFromPayment = await Booking.findByPk(payment.bookingId, {
+        include: [
+          {
             model: Court,
             as: 'court',
             include: [{
               model: Establishment,
               as: 'establishment',
-              attributes: ['id', 'name', 'slug', 'address']
+              attributes: ['id', 'name', 'slug', 'address', 'city']
             }]
-          }]
-        }]
+          }
+        ]
       });
-
-      if (payment && payment.booking) {
-        return res.json(payment.booking);
+      if (bookingFromPayment) {
+        return res.json(bookingFromPayment);
       }
-
-      return res.status(404).json({ error: 'Reserva no encontrada' });
     }
 
-    res.json(booking);
+    console.log(`[by-payment] No booking found for paymentId: ${paymentId}`);
+    return res.status(404).json({ error: 'Reserva no encontrada' });
   } catch (error) {
     console.error('Error finding booking by payment:', error);
     res.status(500).json({ error: 'Error al buscar reserva' });
