@@ -31,8 +31,8 @@ async function generateQRCodeDataURL(bookingId, checkInCode, options = {}) {
     width: options.width || 200,
     margin: options.margin || 2,
     color: {
-      dark: options.darkColor || '#ffffff',
-      light: options.lightColor || '#00000000' // Transparent background
+      dark: options.darkColor || '#000000',
+      light: options.lightColor || '#ffffff'
     },
     errorCorrectionLevel: 'M'
   };
@@ -57,8 +57,8 @@ async function generateQRCodeSVG(bookingId, checkInCode, options = {}) {
     width: options.width || 200,
     margin: options.margin || 2,
     color: {
-      dark: options.darkColor || '#ffffff',
-      light: options.lightColor || '#00000000'
+      dark: options.darkColor || '#000000',
+      light: options.lightColor || '#ffffff'
     },
     errorCorrectionLevel: 'M'
   };
