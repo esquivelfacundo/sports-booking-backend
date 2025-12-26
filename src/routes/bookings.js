@@ -292,6 +292,41 @@ router.get('/:bookingId/qr.png', async (req, res) => {
 });
 
 /**
+ * GET /api/bookings/:bookingId/qr
+ * Generate QR code for a booking - PUBLIC
+ */
+router.get('/:bookingId/qr', async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { format = 'dataurl' } = req.query;
+
+    const booking = await Booking.findByPk(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Reserva no encontrada' });
+    }
+
+    // Generate check-in code if not exists
+    if (!booking.checkInCode) {
+      const checkInCode = qrService.generateCheckInCode();
+      await booking.update({ checkInCode });
+      booking.checkInCode = checkInCode;
+    }
+
+    if (format === 'svg') {
+      const svg = await qrService.generateQRCodeSVG(bookingId, booking.checkInCode);
+      res.json({ qr: svg, format: 'svg', url: qrService.getBookingQRUrl(bookingId, booking.checkInCode) });
+    } else {
+      const dataUrl = await qrService.generateQRCodeDataURL(bookingId, booking.checkInCode);
+      res.json({ qr: dataUrl, format: 'dataurl', url: qrService.getBookingQRUrl(bookingId, booking.checkInCode) });
+    }
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    res.status(500).json({ error: 'Error al generar código QR' });
+  }
+});
+
+/**
  * GET /api/bookings/checkin/:bookingId
  * Get booking details for QR scan - public endpoint
  */
@@ -801,41 +836,6 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error getting payments:', error);
     res.status(500).json({ error: 'Error al obtener los pagos' });
-  }
-});
-
-/**
- * GET /api/bookings/:bookingId/qr
- * Generate QR code for a booking
- */
-router.get('/:bookingId/qr', async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-    const { format = 'dataurl' } = req.query;
-
-    const booking = await Booking.findByPk(bookingId);
-
-    if (!booking) {
-      return res.status(404).json({ error: 'Reserva no encontrada' });
-    }
-
-    // Generate check-in code if not exists
-    if (!booking.checkInCode) {
-      const checkInCode = qrService.generateCheckInCode();
-      await booking.update({ checkInCode });
-      booking.checkInCode = checkInCode;
-    }
-
-    if (format === 'svg') {
-      const svg = await qrService.generateQRCodeSVG(bookingId, booking.checkInCode);
-      res.json({ qr: svg, format: 'svg', url: qrService.getBookingQRUrl(bookingId, booking.checkInCode) });
-    } else {
-      const dataUrl = await qrService.generateQRCodeDataURL(bookingId, booking.checkInCode);
-      res.json({ qr: dataUrl, format: 'dataurl', url: qrService.getBookingQRUrl(bookingId, booking.checkInCode) });
-    }
-  } catch (error) {
-    console.error('Error generating QR code:', error);
-    res.status(500).json({ error: 'Error al generar código QR' });
   }
 });
 
