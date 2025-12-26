@@ -276,14 +276,21 @@ const updateEstablishment = async (req, res) => {
       });
     }
 
-    const updateData = req.body;
+    const updateData = { ...req.body };
     
-    // Handle coordinates update
+    // Handle coordinates update - accept both formats
     if (updateData.coordinates) {
-      updateData.coordinates = {
-        type: 'Point',
-        coordinates: [updateData.coordinates.lng, updateData.coordinates.lat]
-      };
+      updateData.latitude = updateData.coordinates.lat;
+      updateData.longitude = updateData.coordinates.lng;
+      delete updateData.coordinates;
+    }
+    
+    // Ensure latitude and longitude are numbers if provided
+    if (updateData.latitude !== undefined && updateData.latitude !== null) {
+      updateData.latitude = parseFloat(updateData.latitude);
+    }
+    if (updateData.longitude !== undefined && updateData.longitude !== null) {
+      updateData.longitude = parseFloat(updateData.longitude);
     }
 
     await establishment.update(updateData);
