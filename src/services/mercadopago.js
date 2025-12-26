@@ -8,8 +8,8 @@ const config = {
   clientSecret: process.env.MP_CLIENT_SECRET,
   collectorId: process.env.MP_COLLECTOR_ID || null,
   webhookSecret: process.env.MP_WEBHOOK_SECRET,
-  // Use NGROK_URL for OAuth callbacks in development, APP_URL in production
-  appUrl: process.env.NGROK_URL || process.env.APP_URL || 'http://localhost:8001',
+  // Use APP_URL in production, NGROK_URL only for local development
+  appUrl: process.env.APP_URL || process.env.NGROK_URL || 'http://localhost:8001',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:4555',
   defaultFeePercent: parseFloat(process.env.MP_DEFAULT_FEE_PERCENT) || 10
 };
