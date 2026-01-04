@@ -100,6 +100,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
+    isOpen: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'Whether the establishment is currently accepting bookings (can be toggled by owner)'
+    },
     isVerified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
