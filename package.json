@@ -4,7 +4,7 @@
   "description": "Backend API for Sports Booking Platform",
   "main": "src/app.js",
   "scripts": {
-    "start": "npm run migrate && node server.js",
+    "start": "node scripts/migrate-and-start.js",
     "dev": "nodemon server.js",
     "test": "jest",
     "migrate": "sequelize-cli db:migrate",
