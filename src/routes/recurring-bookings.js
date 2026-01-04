@@ -582,8 +582,8 @@ router.delete('/:groupId', authenticateToken, async (req, res) => {
   
   try {
     const { groupId } = req.params;
-    const { cancelType = 'all', bookingId, reason } = req.body;
-    // cancelType: 'single' | 'all_pending'
+    const { cancelType = 'all', bookingId, fromDate, reason } = req.body;
+    // cancelType: 'single' | 'from_date' | 'all_pending'
     
     const group = await RecurringBookingGroup.findByPk(groupId);
     
@@ -617,6 +617,60 @@ router.delete('/:groupId', authenticateToken, async (req, res) => {
       await group.update({
         cancelledOccurrences: group.cancelledOccurrences + 1
       }, { transaction });
+      
+    } else if (cancelType === 'from_date' && (fromDate || bookingId)) {
+      // Cancel from a specific date forward
+      let startDate = fromDate;
+      
+      // If bookingId provided, get the date from that booking
+      if (bookingId && !fromDate) {
+        const refBooking = await Booking.findByPk(bookingId);
+        if (refBooking) {
+          startDate = refBooking.date;
+        }
+      }
+      
+      if (!startDate) {
+        startDate = new Date().toISOString().split('T')[0];
+      }
+      
+      const bookingsFromDate = await Booking.findAll({
+        where: {
+          recurringGroupId: groupId,
+          status: { [Op.in]: ['pending', 'confirmed'] },
+          date: { [Op.gte]: startDate }
+        }
+      });
+      
+      for (const booking of bookingsFromDate) {
+        await booking.update({
+          status: 'cancelled',
+          cancellationReason: reason,
+          cancelledAt: new Date()
+        }, { transaction });
+        cancelledBookings.push(booking);
+      }
+      
+      // Update group - if all future cancelled, mark as cancelled
+      const remainingActive = await Booking.count({
+        where: {
+          recurringGroupId: groupId,
+          status: { [Op.in]: ['pending', 'confirmed'] },
+          date: { [Op.gte]: new Date().toISOString().split('T')[0] }
+        },
+        transaction
+      });
+      
+      if (remainingActive === 0) {
+        await group.update({
+          status: 'cancelled',
+          cancelledOccurrences: group.cancelledOccurrences + bookingsFromDate.length
+        }, { transaction });
+      } else {
+        await group.update({
+          cancelledOccurrences: group.cancelledOccurrences + bookingsFromDate.length
+        }, { transaction });
+      }
       
     } else {
       // Cancel all pending bookings
