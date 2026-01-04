@@ -50,6 +50,7 @@
     "qrcode": "^1.5.4",
     "redis": "^4.6.10",
     "sequelize": "^6.35.0",
+    "umzug": "^3.8.2",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

@@ -1,27 +1,49 @@
 #!/usr/bin/env node
 
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
+const path = require('path');
 
-async function migrateAndStart() {
-  console.log('🔄 Running database migrations...');
+async function runMigrations() {
+  console.log('🔄 Running database migrations programmatically...');
   
   try {
-    // Run migrations with timeout
-    const { stdout, stderr } = await execPromise('npx sequelize-cli db:migrate', {
-      timeout: 30000 // 30 seconds timeout
+    const { sequelize } = require('../src/config/database');
+    const { Umzug, SequelizeStorage } = require('umzug');
+    
+    const umzug = new Umzug({
+      migrations: {
+        glob: path.join(__dirname, '../src/migrations/*.js'),
+        resolve: ({ name, path: migrationPath, context }) => {
+          const migration = require(migrationPath);
+          return {
+            name,
+            up: async () => migration.up(context, require('sequelize').DataTypes),
+            down: async () => migration.down(context, require('sequelize').DataTypes),
+          };
+        },
+      },
+      context: sequelize.getQueryInterface(),
+      storage: new SequelizeStorage({ sequelize }),
+      logger: console,
     });
     
-    if (stdout) console.log(stdout);
-    if (stderr) console.error(stderr);
+    const pending = await umzug.pending();
+    console.log(`📋 Pending migrations: ${pending.length}`);
     
-    console.log('✅ Migrations completed successfully');
+    if (pending.length > 0) {
+      console.log('🔧 Running migrations:', pending.map(m => m.name).join(', '));
+      await umzug.up();
+      console.log('✅ Migrations completed successfully');
+    } else {
+      console.log('✅ No pending migrations');
+    }
   } catch (error) {
     console.error('⚠️  Migration error (continuing anyway):', error.message);
-    // Don't fail - continue to start server even if migrations fail
-    // This prevents healthcheck failures
+    console.error(error.stack);
   }
+}
+
+async function migrateAndStart() {
+  await runMigrations();
   
   console.log('🚀 Starting server...');
   
