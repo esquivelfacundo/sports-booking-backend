@@ -274,6 +274,28 @@ module.exports = (sequelize, DataTypes) => {
         is: /^[0-9]{4}$/
       },
       comment: 'Security PIN for owner operations (4 digits)'
+    },
+    
+    // Recurring booking configuration
+    recurringPaymentPolicy: {
+      type: DataTypes.ENUM('advance_one', 'advance_all', 'pay_on_attendance'),
+      defaultValue: 'advance_one',
+      comment: 'Payment policy for recurring bookings: advance_one = pay 1 booking ahead'
+    },
+    recurringMinWeeks: {
+      type: DataTypes.INTEGER,
+      defaultValue: 4,
+      comment: 'Minimum weeks for a recurring booking'
+    },
+    recurringMaxWeeks: {
+      type: DataTypes.INTEGER,
+      defaultValue: 24,
+      comment: 'Maximum weeks for a recurring booking'
+    },
+    recurringCancellationPolicy: {
+      type: DataTypes.ENUM('refund_unused', 'credit', 'no_refund'),
+      defaultValue: 'credit',
+      comment: 'Policy for cancelling recurring bookings'
     }
   }, {
     tableName: 'establishments',

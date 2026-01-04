@@ -115,6 +115,30 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    recurringGroupId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'recurring_booking_groups',
+        key: 'id'
+      },
+      comment: 'Reference to the recurring booking group'
+    },
+    recurringSequence: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Position in the recurring series (1, 2, 3...)'
+    },
+    recurringPaymentStatus: {
+      type: DataTypes.ENUM('not_applicable', 'pending', 'paid', 'paid_in_advance'),
+      defaultValue: 'not_applicable',
+      comment: 'Payment status specific to recurring booking logic'
+    },
+    paidForNextId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'ID of the next booking that was paid when attending this one'
+    },
     depositAmount: {
       type: DataTypes.DECIMAL(10, 2),
       defaultValue: 0

@@ -57,12 +57,13 @@ app.use(cors(corsOptions));
 // Rate limiting - more permissive for SPA applications
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 1 * 60 * 1000, // 1 minute
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 2000 : 500), // 2000 in dev, 500 in prod
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (process.env.NODE_ENV === 'development' ? 2000 : 1500), // 2000 in dev, 1500 in prod (increased from 500)
   message: {
     error: 'Demasiadas solicitudes. Por favor, espera un momento antes de intentar de nuevo.',
-    code: 'TOO_MANY_REQUESTS'
+    code: 'TOO_MANY_REQUESTS',
+    retryAfter: 60 // seconds until rate limit resets
   },
-  standardHeaders: true,
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false,
   skip: (req) => process.env.NODE_ENV === 'development', // Skip rate limiting in development
   keyGenerator: (req) => {
@@ -134,6 +135,7 @@ app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/v1', require('./routes/api-v1'));
 app.use('/api/whatsapp', require('./routes/whatsapp'));
 app.use('/api/coupons', require('./routes/coupons'));
+app.use('/api/recurring-bookings', require('./routes/recurring-bookings'));
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
