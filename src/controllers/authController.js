@@ -5,6 +5,10 @@ const { Op } = require('sequelize');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { OAuth2Client } = require('google-auth-library');
+const { sendVerificationCode } = require('../services/email');
+
+// In-memory storage for verification codes (in production, use Redis)
+const verificationCodes = new Map();
 
 const register = async (req, res) => {
   try {
@@ -638,6 +642,158 @@ const superAdminLogin = async (req, res) => {
   }
 };
 
+/**
+ * Send verification code for player registration
+ */
+const sendRegistrationCode = async (req, res) => {
+  try {
+    const { email, firstName } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        error: 'Email required',
+        message: 'Por favor ingresá tu email'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(409).json({
+        error: 'User already exists',
+        message: 'Ya existe una cuenta con este email'
+      });
+    }
+
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store code with expiration (10 minutes)
+    verificationCodes.set(email, {
+      code,
+      firstName,
+      expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+    });
+
+    // Send email
+    const emailSent = await sendVerificationCode(email, code, firstName);
+    
+    if (!emailSent) {
+      return res.status(500).json({
+        error: 'Email failed',
+        message: 'No se pudo enviar el código. Intentá de nuevo.'
+      });
+    }
+
+    console.log(`📧 Verification code sent to ${email}: ${code}`);
+
+    res.json({
+      message: 'Código enviado',
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Send verification code error:', error);
+    res.status(500).json({
+      error: 'Failed to send code',
+      message: 'Error al enviar el código'
+    });
+  }
+};
+
+/**
+ * Verify code and complete player registration
+ */
+const verifyAndRegister = async (req, res) => {
+  try {
+    const { email, code, password, firstName, lastName, phone, location } = req.body;
+
+    if (!email || !code || !password) {
+      return res.status(400).json({
+        error: 'Missing fields',
+        message: 'Email, código y contraseña son requeridos'
+      });
+    }
+
+    // Check verification code
+    const stored = verificationCodes.get(email);
+    
+    if (!stored) {
+      return res.status(400).json({
+        error: 'Code not found',
+        message: 'No se encontró un código para este email. Solicitá uno nuevo.'
+      });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      verificationCodes.delete(email);
+      return res.status(400).json({
+        error: 'Code expired',
+        message: 'El código expiró. Solicitá uno nuevo.'
+      });
+    }
+
+    if (stored.code !== code) {
+      return res.status(400).json({
+        error: 'Invalid code',
+        message: 'Código incorrecto'
+      });
+    }
+
+    // Code is valid - create user
+    verificationCodes.delete(email);
+
+    // Check if user was created in the meantime
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(409).json({
+        error: 'User already exists',
+        message: 'Ya existe una cuenta con este email'
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user
+    const user = await User.create({
+      email,
+      password: hashedPassword,
+      firstName: firstName || stored.firstName || '',
+      lastName: lastName || '',
+      phone: phone || '',
+      location: location || '',
+      userType: 'player',
+      isEmailVerified: true
+    });
+
+    // Generate tokens
+    const { accessToken, refreshToken: refreshTokenValue } = generateTokenPair(user.id);
+
+    // Remove password from response
+    const userResponse = { ...user.toJSON() };
+    delete userResponse.password;
+
+    console.log(`✅ User registered via email verification: ${email}`);
+
+    res.status(201).json({
+      message: 'Cuenta creada exitosamente',
+      user: userResponse,
+      tokens: {
+        accessToken,
+        refreshToken: refreshTokenValue
+      }
+    });
+
+  } catch (error) {
+    console.error('Verify and register error:', error);
+    res.status(500).json({
+      error: 'Registration failed',
+      message: 'Error al crear la cuenta'
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -648,5 +804,7 @@ module.exports = {
   forgotPassword,
   resetPassword,
   googleLogin,
-  superAdminLogin
+  superAdminLogin,
+  sendRegistrationCode,
+  verifyAndRegister
 };

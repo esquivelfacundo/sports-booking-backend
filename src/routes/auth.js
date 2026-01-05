@@ -11,7 +11,9 @@ const {
   forgotPassword,
   resetPassword,
   googleLogin,
-  superAdminLogin
+  superAdminLogin,
+  sendRegistrationCode,
+  verifyAndRegister
 } = require('../controllers/authController');
 
 const router = express.Router();
@@ -119,6 +121,17 @@ router.post('/login', loginValidation, handleValidationErrors, login);
 router.post('/google', googleLogin);
 router.post('/superadmin-login', superAdminLogin);
 router.post('/refresh-token', refreshToken);
+
+// Email verification registration (for players)
+router.post('/send-verification-code', [
+  body('email').isEmail().normalizeEmail().withMessage('Email inválido')
+], handleValidationErrors, sendRegistrationCode);
+
+router.post('/verify-and-register', [
+  body('email').isEmail().normalizeEmail().withMessage('Email inválido'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('Código debe tener 6 dígitos'),
+  body('password').isLength({ min: 6 }).withMessage('Contraseña debe tener al menos 6 caracteres')
+], handleValidationErrors, verifyAndRegister);
 router.post('/forgot-password', [
   body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email address')
 ], handleValidationErrors, forgotPassword);

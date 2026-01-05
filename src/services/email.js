@@ -420,10 +420,96 @@ async function sendEstablishmentNotification(booking, establishment, court) {
   return sendEmail(establishmentEmail, subject, html);
 }
 
+/**
+ * Send email verification code for player registration
+ */
+async function sendVerificationCode(email, code, name = '') {
+  const logoUrl = 'https://www.miscanchas.com/assets/mc-logo.png';
+  const subject = `Tu código de verificación - MisCanchas`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Código de Verificación</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f9fafb;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          
+          <!-- Header with Logo -->
+          <tr>
+            <td style="padding: 32px 40px 24px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+              <img src="${logoUrl}" alt="MisCanchas" style="height: 40px; width: auto;" />
+            </td>
+          </tr>
+          
+          <!-- Greeting -->
+          <tr>
+            <td style="padding: 32px 40px 0; text-align: center;">
+              <p style="color: #111827; font-size: 20px; font-weight: 600; margin: 0 0 8px;">
+                ¡Hola${name ? ', ' + name.split(' ')[0] : ''}!
+              </p>
+              <p style="color: #6b7280; font-size: 14px; margin: 0;">
+                Ingresá este código para verificar tu cuenta
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Verification Code -->
+          <tr>
+            <td style="padding: 32px 40px; text-align: center;">
+              <div style="background-color: #f3f4f6; border-radius: 12px; padding: 24px; display: inline-block;">
+                <span style="font-family: 'SF Mono', Monaco, 'Courier New', monospace; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #10b981;">
+                  ${code}
+                </span>
+              </div>
+              <p style="color: #9ca3af; font-size: 12px; margin: 16px 0 0;">
+                Este código expira en 10 minutos
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Security Note -->
+          <tr>
+            <td style="padding: 0 40px 32px;">
+              <div style="background-color: #fef3c7; border-radius: 8px; padding: 12px 16px;">
+                <p style="color: #92400e; font-size: 12px; margin: 0;">
+                  🔒 Si no solicitaste este código, podés ignorar este email.
+                </p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+              <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                © ${new Date().getFullYear()} MisCanchas · Reservá tu cancha fácil
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  return sendEmail(email, subject, html);
+}
+
 module.exports = {
   sendEmail,
   sendBookingConfirmation,
   sendEstablishmentNotification,
+  sendVerificationCode,
   formatDate,
   formatCurrency
 };
