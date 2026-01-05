@@ -57,14 +57,43 @@ router.get('/', authenticateToken, async (req, res) => {
     const groups = await RecurringBookingGroup.findAll({
       where,
       include: [
-        { model: Court, as: 'primaryCourt', attributes: ['id', 'name', 'sport'] },
+        { model: Court, as: 'primaryCourt', attributes: ['id', 'name', 'sport', 'pricePerHour'] },
         { model: Client, as: 'client', attributes: ['id', 'name', 'phone', 'email'] },
         { model: User, as: 'createdByUser', attributes: ['id', 'firstName', 'lastName'] }
       ],
       order: [['createdAt', 'DESC']]
     });
     
-    res.json({ success: true, groups });
+    // Enrich groups with calculated data
+    const enrichedGroups = await Promise.all(groups.map(async (group) => {
+      const groupData = group.toJSON();
+      
+      // Count bookings for this group
+      const bookings = await Booking.findAll({
+        where: { recurringGroupId: group.id },
+        attributes: ['id', 'date', 'status']
+      });
+      
+      const today = new Date().toISOString().split('T')[0];
+      const totalBookings = bookings.length;
+      const completedBookings = bookings.filter(b => 
+        b.date < today && b.status !== 'cancelled'
+      ).length;
+      const cancelledBookings = bookings.filter(b => b.status === 'cancelled').length;
+      
+      return {
+        ...groupData,
+        // Add frontend-expected fields
+        totalWeeks: totalBookings || groupData.totalOccurrences || 0,
+        completedOccurrences: completedBookings,
+        cancelledOccurrences: cancelledBookings,
+        // Ensure pricePerBooking is a number
+        pricePerBooking: parseFloat(groupData.pricePerBooking) || 0,
+        totalPrice: (parseFloat(groupData.pricePerBooking) || 0) * totalBookings
+      };
+    }));
+    
+    res.json({ success: true, groups: enrichedGroups });
   } catch (error) {
     console.error('Error fetching recurring booking groups:', error);
     res.status(500).json({ error: 'Failed to fetch recurring booking groups' });
