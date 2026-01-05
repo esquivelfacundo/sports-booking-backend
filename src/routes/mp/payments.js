@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { Op } = require('sequelize');
 const mpService = require('../../services/mercadopago');
 const { Establishment, PlatformConfig, Booking, ClientDebt } = require('../../models');
 const { authenticateToken, optionalAuth } = require('../../middleware/auth');
@@ -83,6 +84,37 @@ router.post('/create-split-preference', optionalAuth, async (req, res) => {
         error: 'Establishment has not connected their Mercado Pago account',
         code: 'MP_NOT_CONNECTED'
       });
+    }
+
+    // Check availability BEFORE creating payment preference
+    if (metadata?.courtId && metadata?.date && metadata?.startTime && metadata?.endTime) {
+      const conflictingBooking = await Booking.findOne({
+        where: {
+          courtId: metadata.courtId,
+          date: metadata.date,
+          status: { [Op.in]: ['pending', 'confirmed', 'in_progress'] },
+          [Op.or]: [
+            {
+              startTime: { [Op.lt]: metadata.endTime },
+              endTime: { [Op.gt]: metadata.startTime }
+            }
+          ]
+        }
+      });
+
+      if (conflictingBooking) {
+        console.log('⚠️ Slot already booked:', {
+          courtId: metadata.courtId,
+          date: metadata.date,
+          requestedTime: `${metadata.startTime}-${metadata.endTime}`,
+          conflictingBooking: conflictingBooking.id
+        });
+        return res.status(409).json({
+          error: 'El horario ya no está disponible',
+          message: 'Otro usuario reservó este horario. Por favor selecciona otro horario.',
+          code: 'SLOT_NOT_AVAILABLE'
+        });
+      }
     }
 
     // Get platform config for default fee
