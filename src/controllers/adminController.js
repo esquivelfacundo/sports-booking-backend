@@ -263,6 +263,52 @@ const updateEstablishmentStatus = async (req, res) => {
   }
 };
 
+const updateEstablishmentAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Establishment not found'
+      });
+    }
+
+    const updateData = { ...req.body };
+    
+    // Handle coordinates update
+    if (updateData.coordinates) {
+      updateData.latitude = updateData.coordinates.lat;
+      updateData.longitude = updateData.coordinates.lng;
+      delete updateData.coordinates;
+    }
+    
+    // Parse numeric fields
+    if (updateData.latitude !== undefined && updateData.latitude !== null) {
+      updateData.latitude = parseFloat(updateData.latitude);
+    }
+    if (updateData.longitude !== undefined && updateData.longitude !== null) {
+      updateData.longitude = parseFloat(updateData.longitude);
+    }
+
+    await establishment.update(updateData);
+
+    res.json({
+      success: true,
+      message: 'Establishment updated successfully',
+      establishment
+    });
+  } catch (error) {
+    console.error('Error updating establishment:', error);
+    res.status(500).json({
+      error: 'Error updating establishment',
+      message: error.message
+    });
+  }
+};
+
 const deleteEstablishmentAdmin = async (req, res) => {
   try {
     const { id } = req.params;
@@ -768,6 +814,7 @@ module.exports = {
   approveEstablishment,
   rejectEstablishment,
   updateEstablishmentStatus,
+  updateEstablishmentAdmin,
   deleteEstablishmentAdmin,
   // Users
   getAllUsers,

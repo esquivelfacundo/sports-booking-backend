@@ -9,6 +9,7 @@ const {
   approveEstablishment,
   rejectEstablishment,
   updateEstablishmentStatus,
+  updateEstablishmentAdmin,
   deleteEstablishmentAdmin,
   getAllUsers,
   getAllPlayersAndClients,
@@ -85,6 +86,7 @@ router.get('/establishments', authenticateToken, requireRole(['admin', 'superadm
 router.put('/establishments/:id/approve', authenticateToken, requireRole(['admin', 'superadmin']), approveEstablishment);
 router.put('/establishments/:id/reject', authenticateToken, requireRole(['admin', 'superadmin']), rejectEstablishment);
 router.put('/establishments/:id/status', authenticateToken, requireRole(['admin', 'superadmin']), updateEstablishmentStatus);
+router.put('/establishments/:id', authenticateToken, requireRole(['admin', 'superadmin']), updateEstablishmentAdmin);
 router.delete('/establishments/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteEstablishmentAdmin);
 
 // Update establishment custom fee
