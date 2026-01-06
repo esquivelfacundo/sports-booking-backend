@@ -1,4 +1,4 @@
-const { User, Establishment, Court, Booking, Payment, Review, ClientDebt, sequelize } = require('../models');
+const { User, Establishment, Court, Booking, Payment, Review, ClientDebt, Client, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 // ==================== ESTABLISHMENTS ====================
@@ -636,6 +636,132 @@ const getPlatformStats = async (req, res) => {
   }
 };
 
+// Get all players (registered users) + clients (establishment contacts) combined
+const getAllPlayersAndClients = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search,
+      registered, // 'all', 'yes', 'no'
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const offset = (page - 1) * parseInt(limit);
+    const results = [];
+
+    // 1. Get registered users (players)
+    const userWhere = { userType: 'player' };
+    if (search) {
+      userWhere[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { phone: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const users = await User.findAll({
+      where: userWhere,
+      attributes: ['id', 'firstName', 'lastName', 'email', 'phone', 'isActive', 'createdAt'],
+      order: [[sortBy, sortOrder]]
+    });
+
+    // Transform users
+    users.forEach(user => {
+      results.push({
+        id: user.id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        phone: user.phone,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        isRegistered: true,
+        source: 'user',
+        establishmentName: null
+      });
+    });
+
+    // 2. Get clients (establishment contacts)
+    const clientWhere = {};
+    if (search) {
+      clientWhere[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { phone: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const clients = await Client.findAll({
+      where: clientWhere,
+      include: [{
+        model: Establishment,
+        as: 'establishment',
+        attributes: ['id', 'name']
+      }],
+      order: [[sortBy, sortOrder]]
+    });
+
+    // Transform clients
+    clients.forEach(client => {
+      results.push({
+        id: client.id,
+        name: client.name,
+        email: client.email,
+        phone: client.phone,
+        isActive: client.isActive,
+        createdAt: client.createdAt,
+        isRegistered: false,
+        source: 'client',
+        establishmentId: client.establishmentId,
+        establishmentName: client.establishment?.name || null,
+        totalBookings: client.totalBookings,
+        totalSpent: client.totalSpent
+      });
+    });
+
+    // Filter by registered status if specified
+    let filteredResults = results;
+    if (registered === 'yes') {
+      filteredResults = results.filter(r => r.isRegistered);
+    } else if (registered === 'no') {
+      filteredResults = results.filter(r => !r.isRegistered);
+    }
+
+    // Sort combined results
+    filteredResults.sort((a, b) => {
+      const aVal = a[sortBy] || '';
+      const bVal = b[sortBy] || '';
+      if (sortOrder === 'DESC') {
+        return bVal > aVal ? 1 : -1;
+      }
+      return aVal > bVal ? 1 : -1;
+    });
+
+    // Paginate
+    const total = filteredResults.length;
+    const paginatedResults = filteredResults.slice(offset, offset + parseInt(limit));
+
+    res.json({
+      success: true,
+      data: paginatedResults,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching players and clients:', error);
+    res.status(500).json({
+      error: 'Error fetching players and clients',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   // Establishments
   getAllEstablishments,
@@ -645,6 +771,7 @@ module.exports = {
   deleteEstablishmentAdmin,
   // Users
   getAllUsers,
+  getAllPlayersAndClients,
   suspendUser,
   activateUser,
   deleteUserAdmin,

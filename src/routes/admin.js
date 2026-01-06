@@ -11,6 +11,7 @@ const {
   updateEstablishmentStatus,
   deleteEstablishmentAdmin,
   getAllUsers,
+  getAllPlayersAndClients,
   suspendUser,
   activateUser,
   deleteUserAdmin,
@@ -181,6 +182,7 @@ router.put('/establishments/:id/credentials', authenticateToken, requireRole(['a
 
 // Users management
 router.get('/users', authenticateToken, requireRole(['admin', 'superadmin']), getAllUsers);
+router.get('/players-clients', authenticateToken, requireRole(['admin', 'superadmin']), getAllPlayersAndClients);
 router.put('/users/:id/suspend', authenticateToken, requireRole(['admin', 'superadmin']), suspendUser);
 router.put('/users/:id/activate', authenticateToken, requireRole(['admin', 'superadmin']), activateUser);
 router.delete('/users/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteUserAdmin);
