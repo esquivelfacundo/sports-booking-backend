@@ -291,14 +291,27 @@ router.post('/register', authenticateToken, async (req, res) => {
     // Create courts if provided
     if (courts && courts.length > 0) {
       const { Court } = require('../models');
+      
+      // Map frontend surface types to backend ENUM values
+      const surfaceMap = {
+        'synthetic': 'synthetic',
+        'grass': 'grass',
+        'clay': 'clay',
+        'cement': 'hard',
+        'wood': 'indoor',
+        'hard': 'hard',
+        'indoor': 'indoor',
+        'outdoor': 'outdoor'
+      };
+      
       for (const court of courts) {
+        const mappedSurface = surfaceMap[court.surfaceType] || 'synthetic';
         await Court.create({
           establishmentId: establishment.id,
           name: court.name,
           sport: court.sport,
-          surfaceType: court.surfaceType || 'synthetic',
+          surface: mappedSurface,
           isIndoor: court.isIndoor || false,
-          hasLighting: court.hasLighting || true,
           pricePerHour: court.pricePerHour || 0,
           isActive: true
         }, { transaction });
@@ -328,10 +341,14 @@ router.post('/register', authenticateToken, async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     console.error('Error registering establishment:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    console.error('Request body:', JSON.stringify(req.body, null, 2));
     res.status(500).json({
       success: false,
       message: 'Error al registrar el establecimiento',
-      error: error.message
+      error: error.message,
+      details: process.env.NODE_ENV !== 'production' ? error.stack : undefined
     });
   }
 });
