@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const createEstablishment = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userType = req.user.userType;
     const {
       name,
       description,
@@ -22,6 +23,18 @@ const createEstablishment = async (req, res) => {
       accessEmail,
       accessPassword
     } = req.body;
+
+    console.log('[createEstablishment] Request from user:', { userId, userType, accessEmail: !!accessEmail, accessPassword: !!accessPassword });
+
+    // If request is from superadmin, require accessEmail and accessPassword
+    if (userType === 'superadmin' || userType === 'admin') {
+      if (!accessEmail || !accessPassword) {
+        return res.status(400).json({
+          error: 'Missing credentials',
+          message: 'accessEmail and accessPassword are required when creating establishment as admin'
+        });
+      }
+    }
 
     // If accessEmail and accessPassword are provided, create a new user for the establishment
     let establishmentUserId = userId;
@@ -51,6 +64,7 @@ const createEstablishment = async (req, res) => {
       });
 
       establishmentUserId = newUser.id;
+      console.log('[createEstablishment] Created new user for establishment:', { newUserId: newUser.id, email: accessEmail });
     }
 
     const establishment = await Establishment.create({
