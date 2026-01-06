@@ -23,21 +23,21 @@ async function createSuperAdmin() {
       console.log(`   Email: ${email}`);
       console.log(`   ID: ${existing[0].id}\n`);
       
-      // Actualizar a superadmin si no lo es
+      // Actualizar a admin si no lo es
       await sequelize.query(`
         UPDATE users 
-        SET "userType" = 'superadmin', "isActive" = true
+        SET "userType" = 'admin', "isActive" = true
         WHERE email = '${email}'
       `);
-      console.log('✅ Usuario actualizado a superadmin\n');
+      console.log('✅ Usuario actualizado a admin\n');
       return;
     }
 
     // Hash de la contraseña
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Crear usuario superadmin
-    await sequelize.query(`
+    // Crear usuario admin
+    const [result] = await sequelize.query(`
       INSERT INTO users (
         id, email, password, "firstName", "lastName", 
         "userType", "isActive", "createdAt", "updatedAt"
@@ -47,20 +47,21 @@ async function createSuperAdmin() {
         '${hashedPassword}',
         'Super',
         'Admin',
-        'superadmin',
+        'admin',
         true,
         NOW(),
         NOW()
       )
+      RETURNING id, email, "firstName", "lastName", "userType"
     `);
 
-    console.log('✅ Usuario Super Admin creado exitosamente\n');
-    console.log('📧 Email:', email);
-    console.log('🔑 Password:', password);
-    console.log('\n⚠️  IMPORTANTE: Cambia la contraseña después del primer login\n');
+    console.log(' Usuario Admin creado exitosamente\n');
+    console.log(' Email:', email);
+    console.log(' Password:', password);
+    console.log('\n IMPORTANTE: Cambia la contraseña después del primer login\n');
 
   } catch (error) {
-    console.error('❌ Error creando super admin:', error);
+    console.error(' Error creando admin:', error);
     throw error;
   } finally {
     await sequelize.close();
