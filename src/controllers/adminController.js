@@ -808,6 +808,35 @@ const getAllPlayersAndClients = async (req, res) => {
   }
 };
 
+// Delete client (admin)
+const deleteClientAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const client = await Client.findByPk(id);
+    
+    if (!client) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Client not found'
+      });
+    }
+
+    await client.destroy();
+
+    res.json({
+      success: true,
+      message: 'Client deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting client:', error);
+    res.status(500).json({
+      error: 'Error deleting client',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   // Establishments
   getAllEstablishments,
@@ -822,6 +851,8 @@ module.exports = {
   suspendUser,
   activateUser,
   deleteUserAdmin,
+  // Clients
+  deleteClientAdmin,
   // Stats
   getPlatformStats
 };

@@ -16,6 +16,7 @@ const {
   suspendUser,
   activateUser,
   deleteUserAdmin,
+  deleteClientAdmin,
   getPlatformStats
 } = require('../controllers/adminController');
 
@@ -188,6 +189,7 @@ router.get('/players-clients', authenticateToken, requireRole(['admin', 'superad
 router.put('/users/:id/suspend', authenticateToken, requireRole(['admin', 'superadmin']), suspendUser);
 router.put('/users/:id/activate', authenticateToken, requireRole(['admin', 'superadmin']), activateUser);
 router.delete('/users/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteUserAdmin);
+router.delete('/clients/:id', authenticateToken, requireRole(['admin', 'superadmin']), deleteClientAdmin);
 
 // Platform statistics
 router.get('/stats', authenticateToken, requireRole(['admin', 'superadmin']), getPlatformStats);
