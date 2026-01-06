@@ -61,22 +61,22 @@ async function createSuperAdmin() {
     console.log('\n IMPORTANTE: Cambia la contraseña después del primer login\n');
 
   } catch (error) {
-    console.error(' Error creando admin:', error);
+    console.error('❌ Error creando admin:', error);
     throw error;
-  } finally {
-    await sequelize.close();
   }
 }
 
 // Ejecutar si se llama directamente
 if (require.main === module) {
   createSuperAdmin()
-    .then(() => {
+    .then(async () => {
       console.log('✅ Script completado');
+      await sequelize.close();
       process.exit(0);
     })
-    .catch((error) => {
+    .catch(async (error) => {
       console.error('❌ Error:', error);
+      await sequelize.close();
       process.exit(1);
     });
 }

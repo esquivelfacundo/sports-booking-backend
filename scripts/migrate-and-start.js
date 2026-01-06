@@ -66,22 +66,26 @@ async function runMigrations() {
   }
 }
 
-async function updateSuperAdminPassword() {
+async function ensureSuperAdmin() {
   // Only run if environment variables are set
   if (process.env.SUPERADMIN_EMAIL && process.env.SUPERADMIN_SECRET) {
     try {
+      console.log('🔐 Ensuring superadmin user exists...');
+      const { createSuperAdmin } = require('../src/scripts/createSuperAdmin');
+      await createSuperAdmin();
+      
       console.log('🔐 Updating superadmin password...');
       const { updateSuperAdminPassword } = require('../src/scripts/updateSuperAdminPassword');
       await updateSuperAdminPassword();
     } catch (error) {
-      console.log('⚠️  Superadmin password update skipped:', error.message);
+      console.log('⚠️  Superadmin setup skipped:', error.message);
     }
   }
 }
 
 async function migrateAndStart() {
   await runMigrations();
-  await updateSuperAdminPassword();
+  await ensureSuperAdmin();
   
   console.log('🚀 Starting server...');
   
