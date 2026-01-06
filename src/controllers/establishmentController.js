@@ -81,7 +81,30 @@ const createEstablishment = async (req, res) => {
       amenities: amenities || [],
       rules: rules || [],
       openingHours: openingHours || {},
-      sports: sports || []
+      sports: sports || [],
+      // Initialize default values for booking configuration
+      registrationStatus: 'approved',
+      isActive: true,
+      requireDeposit: true,
+      depositType: 'percentage',
+      depositPercentage: 50,
+      depositFixedAmount: 5000,
+      allowFullPayment: false,
+      maxAdvanceBookingDays: 30,
+      minAdvanceBookingHours: 2,
+      allowSameDayBooking: true,
+      cancellationDeadlineHours: 24,
+      cancellationPolicy: 'partial_refund',
+      refundPercentage: 50,
+      noShowPenalty: true,
+      noShowPenaltyType: 'deposit_only',
+      noShowPenaltyPercentage: 100,
+      depositPaymentDeadlineHours: 2,
+      closedDates: [],
+      useNationalHolidays: true,
+      images: [],
+      rating: 0,
+      priceRange: '$$'
     });
 
     res.status(201).json({
