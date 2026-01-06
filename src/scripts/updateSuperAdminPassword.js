@@ -9,8 +9,7 @@ async function updateSuperAdminPassword() {
     const newPassword = process.env.SUPERADMIN_SECRET;
 
     if (!email || !newPassword) {
-      console.error('❌ Error: Las variables de entorno SUPERADMIN_EMAIL y SUPERADMIN_SECRET son requeridas');
-      process.exit(1);
+      throw new Error('Las variables de entorno SUPERADMIN_EMAIL y SUPERADMIN_SECRET son requeridas');
     }
 
     // Hash de la nueva contraseña
@@ -35,20 +34,20 @@ async function updateSuperAdminPassword() {
   } catch (error) {
     console.error('❌ Error actualizando contraseña:', error);
     throw error;
-  } finally {
-    await sequelize.close();
   }
 }
 
 // Ejecutar si se llama directamente
 if (require.main === module) {
   updateSuperAdminPassword()
-    .then(() => {
+    .then(async () => {
       console.log('\n✅ Script completado');
+      await sequelize.close();
       process.exit(0);
     })
-    .catch((error) => {
+    .catch(async (error) => {
       console.error('❌ Error:', error);
+      await sequelize.close();
       process.exit(1);
     });
 }
