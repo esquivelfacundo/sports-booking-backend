@@ -5,8 +5,13 @@ async function createSuperAdmin() {
   try {
     console.log('🔐 Creando usuario Super Admin...\n');
 
-    const email = process.env.SUPERADMIN_EMAIL || 'fesquivel@lidius.co';
-    const password = process.env.SUPERADMIN_SECRET || 'Lidius@2001';
+    const email = process.env.SUPERADMIN_EMAIL;
+    const password = process.env.SUPERADMIN_SECRET;
+
+    if (!email || !password) {
+      console.error('❌ Error: Las variables de entorno SUPERADMIN_EMAIL y SUPERADMIN_SECRET son requeridas');
+      process.exit(1);
+    }
 
     // Verificar si ya existe
     const [existing] = await sequelize.query(

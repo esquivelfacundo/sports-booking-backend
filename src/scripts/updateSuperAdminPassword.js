@@ -5,8 +5,13 @@ async function updateSuperAdminPassword() {
   try {
     console.log('🔐 Actualizando contraseña del Super Admin...\n');
 
-    const email = process.env.SUPERADMIN_EMAIL || 'fesquivel@lidius.co';
-    const newPassword = 'Lidius@2001';
+    const email = process.env.SUPERADMIN_EMAIL;
+    const newPassword = process.env.SUPERADMIN_SECRET;
+
+    if (!email || !newPassword) {
+      console.error('❌ Error: Las variables de entorno SUPERADMIN_EMAIL y SUPERADMIN_SECRET son requeridas');
+      process.exit(1);
+    }
 
     // Hash de la nueva contraseña
     const hashedPassword = await bcrypt.hash(newPassword, 10);
