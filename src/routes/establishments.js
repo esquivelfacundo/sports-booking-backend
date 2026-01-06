@@ -292,25 +292,11 @@ router.post('/register', authenticateToken, async (req, res) => {
     if (courts && courts.length > 0) {
       const { Court } = require('../models');
       
-      // Map frontend surface types to backend ENUM values
-      const surfaceMap = {
-        'synthetic': 'synthetic',
-        'grass': 'grass',
-        'clay': 'clay',
-        'cement': 'hard',
-        'wood': 'indoor',
-        'hard': 'hard',
-        'indoor': 'indoor',
-        'outdoor': 'outdoor'
-      };
-      
       for (const court of courts) {
-        const mappedSurface = surfaceMap[court.surfaceType] || 'synthetic';
         await Court.create({
           establishmentId: establishment.id,
-          name: court.name,
-          sport: court.sport,
-          surface: mappedSurface,
+          name: court.name || `Cancha ${courts.indexOf(court) + 1}`,
+          sport: court.sport || 'futbol5',
           isIndoor: court.isIndoor || false,
           pricePerHour: court.pricePerHour || 0,
           isActive: true
