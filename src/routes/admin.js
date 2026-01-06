@@ -127,6 +127,58 @@ router.put('/establishments/:id/fee', authenticateToken, requireRole(['admin', '
   }
 });
 
+// Update establishment credentials (email and password)
+router.put('/establishments/:id/credentials', authenticateToken, requireRole(['admin', 'superadmin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { accessEmail, accessPassword } = req.body;
+    
+    const { Establishment, User } = require('../models');
+    const bcrypt = require('bcryptjs');
+    
+    const establishment = await Establishment.findByPk(id);
+    
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+    
+    // Get the user associated with this establishment
+    const user = await User.findByPk(establishment.userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found for this establishment' });
+    }
+    
+    // Update email if provided
+    if (accessEmail && accessEmail !== user.email) {
+      // Check if new email is already in use
+      const existingUser = await User.findOne({ where: { email: accessEmail } });
+      if (existingUser && existingUser.id !== user.id) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+      user.email = accessEmail;
+    }
+    
+    // Update password if provided
+    if (accessPassword) {
+      const hashedPassword = await bcrypt.hash(accessPassword, 10);
+      user.password = hashedPassword;
+    }
+    
+    await user.save();
+    
+    console.log(`[Admin] Updated credentials for establishment ${establishment.name}`);
+    
+    res.json({
+      success: true,
+      message: 'Credentials updated successfully'
+    });
+  } catch (err) {
+    console.error('Error updating establishment credentials:', err);
+    res.status(500).json({ error: 'Error updating credentials' });
+  }
+});
+
 // Users management
 router.get('/users', authenticateToken, requireRole(['admin', 'superadmin']), getAllUsers);
 router.put('/users/:id/suspend', authenticateToken, requireRole(['admin', 'superadmin']), suspendUser);

@@ -1,6 +1,7 @@
 const { Establishment, Court, Review, User, Favorite } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const bcrypt = require('bcryptjs');
 
 const createEstablishment = async (req, res) => {
   try {
@@ -17,11 +18,43 @@ const createEstablishment = async (req, res) => {
       amenities,
       rules,
       openingHours,
-      sports
+      sports,
+      accessEmail,
+      accessPassword
     } = req.body;
 
+    // If accessEmail and accessPassword are provided, create a new user for the establishment
+    let establishmentUserId = userId;
+    
+    if (accessEmail && accessPassword) {
+      // Check if user with this email already exists
+      const existingUser = await User.findOne({ where: { email: accessEmail } });
+      if (existingUser) {
+        return res.status(400).json({
+          error: 'Email already exists',
+          message: 'A user with this email already exists'
+        });
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(accessPassword, 10);
+
+      // Create new establishment user
+      const newUser = await User.create({
+        firstName: name.split(' ')[0] || 'Admin',
+        lastName: name.split(' ').slice(1).join(' ') || 'Establecimiento',
+        email: accessEmail,
+        password: hashedPassword,
+        userType: 'establishment',
+        isActive: true,
+        emailVerified: true
+      });
+
+      establishmentUserId = newUser.id;
+    }
+
     const establishment = await Establishment.create({
-      userId,
+      userId: establishmentUserId,
       name,
       description,
       address,
