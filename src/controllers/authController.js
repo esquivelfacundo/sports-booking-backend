@@ -589,32 +589,32 @@ const superAdminLogin = async (req, res) => {
     let user = await User.findOne({ where: { email: validEmail } });
 
     if (!user) {
-      // Create superadmin user if doesn't exist
+      // Create admin user if doesn't exist
       const hashedPassword = await bcrypt.hash(validSecret, 10);
       user = await User.create({
         email: validEmail,
         password: hashedPassword,
         firstName: 'Super',
         lastName: 'Admin',
-        userType: 'superadmin',
+        userType: 'admin',
         isActive: true
       });
       console.log('Super admin user created');
-    } else if (user.userType !== 'superadmin') {
-      // Update existing user to superadmin
-      await user.update({ userType: 'superadmin', isActive: true });
-      console.log('User upgraded to superadmin');
+    } else if (user.userType !== 'admin') {
+      // Update existing user to admin
+      await user.update({ userType: 'admin', isActive: true });
+      console.log('User upgraded to admin');
     }
 
     // Generate tokens
     const accessToken = jwt.sign(
-      { userId: user.id, userType: 'superadmin' },
+      { userId: user.id, userType: 'admin' },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
     const refreshTokenValue = jwt.sign(
-      { userId: user.id, userType: 'superadmin' },
+      { userId: user.id, userType: 'admin' },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
     );
