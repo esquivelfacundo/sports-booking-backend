@@ -267,28 +267,42 @@ const deleteEstablishmentAdmin = async (req, res) => {
   try {
     const { id } = req.params;
     
+    console.log('[deleteEstablishmentAdmin] Attempting to delete establishment:', id);
+    
     const establishment = await Establishment.findByPk(id);
     
     if (!establishment) {
+      console.log('[deleteEstablishmentAdmin] Establishment not found:', id);
       return res.status(404).json({
         error: 'Not found',
         message: 'Establishment not found'
       });
     }
 
-    // Soft delete - just mark as inactive and deleted
-    await establishment.update({
-      isActive: false,
-      deletedAt: new Date(),
-      deletedBy: req.user.id
+    console.log('[deleteEstablishmentAdmin] Found establishment:', establishment.name);
+
+    // Delete associated courts first (foreign key constraint)
+    const deletedCourts = await Court.destroy({
+      where: { establishmentId: id }
     });
+    console.log('[deleteEstablishmentAdmin] Deleted courts:', deletedCourts);
+
+    // Delete associated reviews
+    const deletedReviews = await Review.destroy({
+      where: { establishmentId: id }
+    });
+    console.log('[deleteEstablishmentAdmin] Deleted reviews:', deletedReviews);
+
+    // Hard delete the establishment
+    await establishment.destroy();
+    console.log('[deleteEstablishmentAdmin] Establishment deleted successfully');
 
     res.json({
       success: true,
       message: 'Establishment deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting establishment:', error);
+    console.error('[deleteEstablishmentAdmin] Error deleting establishment:', error);
     res.status(500).json({
       error: 'Error deleting establishment',
       message: error.message
