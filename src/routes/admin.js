@@ -198,8 +198,8 @@ router.delete('/clients/:id', authenticateToken, requireRole(['admin', 'superadm
 router.get('/stats', authenticateToken, requireRole(['admin', 'superadmin']), getPlatformStats);
 
 // Integrations / Webhooks
-router.get('/integrations/webhook', authenticateToken, requireRole(['superadmin']), getWebhookConfig);
-router.put('/integrations/webhook', authenticateToken, requireRole(['superadmin']), saveWebhookConfig);
-router.post('/integrations/webhook/test', authenticateToken, requireRole(['superadmin']), sendTestWebhook);
+router.get('/integrations/webhook', authenticateToken, requireRole(['admin', 'superadmin']), getWebhookConfig);
+router.put('/integrations/webhook', authenticateToken, requireRole(['admin', 'superadmin']), saveWebhookConfig);
+router.post('/integrations/webhook/test', authenticateToken, requireRole(['admin', 'superadmin']), sendTestWebhook);
 
 module.exports = router;
