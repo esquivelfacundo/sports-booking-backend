@@ -4,6 +4,7 @@ const { generateTokenPair, verifyRefreshToken } = require('../utils/jwt');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const { sendVerificationCode } = require('../services/email');
 
