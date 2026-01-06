@@ -609,13 +609,13 @@ const superAdminLogin = async (req, res) => {
 
     // Generate tokens
     const accessToken = jwt.sign(
-      { userId: user.id, userType: 'admin' },
+      { userId: user.id, userType: 'superadmin' },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
 
     const refreshTokenValue = jwt.sign(
-      { userId: user.id, userType: 'admin' },
+      { userId: user.id, userType: 'superadmin' },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
     );
