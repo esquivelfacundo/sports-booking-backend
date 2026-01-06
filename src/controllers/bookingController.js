@@ -1,6 +1,7 @@
 const { Booking, Court, Establishment, User, Payment, SplitPayment, SplitPaymentParticipant, Client, Order, Amenity } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const WebhookService = require('../services/webhookService');
 
 const createBooking = async (req, res) => {
   try {
@@ -294,6 +295,19 @@ const createBooking = async (req, res) => {
         }
       ]
     });
+
+    // Send webhook notification if booking was created as confirmed (async)
+    if (initialStatus === 'confirmed') {
+      WebhookService.sendBookingNotification(booking.id)
+        .then(result => {
+          if (result.success) {
+            console.log(`[Webhook] Notification sent for new confirmed booking ${booking.id}`);
+          } else if (!result.skipped) {
+            console.log(`[Webhook] Failed to send notification for booking ${booking.id}:`, result.error);
+          }
+        })
+        .catch(err => console.error('[Webhook] Error:', err));
+    }
 
     res.status(201).json({
       message: isRecurring 
@@ -714,6 +728,19 @@ const updateBooking = async (req, res) => {
     }
 
     await booking.update(updateData);
+
+    // Send webhook notification when booking is confirmed (async, don't wait)
+    if (status === 'confirmed') {
+      WebhookService.sendBookingNotification(booking.id)
+        .then(result => {
+          if (result.success) {
+            console.log(`[Webhook] Notification sent for booking ${booking.id}`);
+          } else if (!result.skipped) {
+            console.log(`[Webhook] Failed to send notification for booking ${booking.id}:`, result.error);
+          }
+        })
+        .catch(err => console.error('[Webhook] Error:', err));
+    }
 
     // Reload booking with associations including orders
     const updatedBooking = await Booking.findOne({

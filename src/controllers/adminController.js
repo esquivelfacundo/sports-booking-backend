@@ -1,5 +1,6 @@
 const { User, Establishment, Court, Booking, Payment, Review, ClientDebt, Client, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const WebhookService = require('../services/webhookService');
 
 // ==================== ESTABLISHMENTS ====================
 
@@ -837,6 +838,102 @@ const deleteClientAdmin = async (req, res) => {
   }
 };
 
+// ==================== INTEGRATIONS / WEBHOOKS ====================
+
+// Get webhook configuration
+const getWebhookConfig = async (req, res) => {
+  try {
+    const config = await WebhookService.getWebhookConfig();
+    
+    res.json({
+      success: true,
+      data: config || {
+        url: '',
+        isActive: false,
+        lastTestAt: null,
+        lastTestStatus: null
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching webhook config:', error);
+    res.status(500).json({
+      error: 'Error fetching webhook configuration',
+      message: error.message
+    });
+  }
+};
+
+// Save webhook configuration
+const saveWebhookConfig = async (req, res) => {
+  try {
+    const { url, isActive } = req.body;
+
+    if (!url && isActive) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'URL is required when webhook is active'
+      });
+    }
+
+    const config = await WebhookService.saveWebhookConfig({
+      url: url || '',
+      isActive: isActive || false
+    });
+
+    res.json({
+      success: true,
+      message: 'Webhook configuration saved',
+      data: config
+    });
+  } catch (error) {
+    console.error('Error saving webhook config:', error);
+    res.status(500).json({
+      error: 'Error saving webhook configuration',
+      message: error.message
+    });
+  }
+};
+
+// Send test webhook
+const sendTestWebhook = async (req, res) => {
+  try {
+    const { url } = req.body;
+
+    if (!url) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'URL is required'
+      });
+    }
+
+    const result = await WebhookService.sendTestNotification(url);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Test notification sent successfully',
+        data: {
+          status: result.status,
+          statusText: result.statusText,
+          response: result.response
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Failed to send test notification',
+        error: result.error || result.statusText
+      });
+    }
+  } catch (error) {
+    console.error('Error sending test webhook:', error);
+    res.status(500).json({
+      error: 'Error sending test webhook',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   // Establishments
   getAllEstablishments,
@@ -854,5 +951,9 @@ module.exports = {
   // Clients
   deleteClientAdmin,
   // Stats
-  getPlatformStats
+  getPlatformStats,
+  // Integrations / Webhooks
+  getWebhookConfig,
+  saveWebhookConfig,
+  sendTestWebhook
 };

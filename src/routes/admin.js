@@ -17,7 +17,10 @@ const {
   activateUser,
   deleteUserAdmin,
   deleteClientAdmin,
-  getPlatformStats
+  getPlatformStats,
+  getWebhookConfig,
+  saveWebhookConfig,
+  sendTestWebhook
 } = require('../controllers/adminController');
 
 const router = express.Router();
@@ -193,5 +196,10 @@ router.delete('/clients/:id', authenticateToken, requireRole(['admin', 'superadm
 
 // Platform statistics
 router.get('/stats', authenticateToken, requireRole(['admin', 'superadmin']), getPlatformStats);
+
+// Integrations / Webhooks
+router.get('/integrations/webhook', authenticateToken, requireRole(['superadmin']), getWebhookConfig);
+router.put('/integrations/webhook', authenticateToken, requireRole(['superadmin']), saveWebhookConfig);
+router.post('/integrations/webhook/test', authenticateToken, requireRole(['superadmin']), sendTestWebhook);
 
 module.exports = router;
