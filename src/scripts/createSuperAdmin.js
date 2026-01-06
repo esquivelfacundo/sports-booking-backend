@@ -6,7 +6,7 @@ async function createSuperAdmin() {
     console.log('🔐 Creando usuario Super Admin...\n');
 
     const email = process.env.SUPERADMIN_EMAIL || 'fesquivel@lidius.co';
-    const password = process.env.SUPERADMIN_SECRET || 'lidius2001mc';
+    const password = process.env.SUPERADMIN_SECRET || 'Lidius@2001';
 
     // Verificar si ya existe
     const [existing] = await sequelize.query(

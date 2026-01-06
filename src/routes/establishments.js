@@ -237,13 +237,22 @@ router.post('/register', authenticateToken, async (req, res) => {
       });
     }
 
-    // Generate unique slug from name
-    const baseSlug = establishmentName
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove accents
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    // Use user-provided slug or generate from name
+    let baseSlug = basicInfo?.slug?.trim();
+    if (!baseSlug) {
+      baseSlug = establishmentName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove accents
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    } else {
+      // Sanitize user-provided slug
+      baseSlug = baseSlug
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/^-+|-+$/g, '');
+    }
     
     // Check for existing slug and make unique if needed
     let slug = baseSlug;
