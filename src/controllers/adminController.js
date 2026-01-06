@@ -480,7 +480,21 @@ const deleteUserAdmin = async (req, res) => {
       });
     }
 
-    // Soft delete
+    // If it's an establishment user, also deactivate their establishment
+    if (user.userType === 'establishment') {
+      const establishment = await Establishment.findOne({
+        where: { userId: user.id }
+      });
+      
+      if (establishment) {
+        await establishment.update({
+          isActive: false,
+          registrationStatus: 'rejected'
+        });
+      }
+    }
+
+    // Soft delete user
     await user.update({
       isActive: false,
       deletedAt: new Date(),
