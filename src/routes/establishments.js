@@ -208,22 +208,84 @@ router.post('/register', authenticateToken, async (req, res) => {
     const latitude = location?.coordinates?.lat || null;
     const longitude = location?.coordinates?.lng || null;
 
+    // Validate required fields
+    const establishmentName = basicInfo?.name?.trim();
+    const establishmentAddress = location?.address?.trim();
+    const establishmentCity = location?.city?.trim();
+
+    if (!establishmentName) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre del establecimiento es requerido'
+      });
+    }
+
+    if (!establishmentAddress) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'La dirección del establecimiento es requerida'
+      });
+    }
+
+    if (!establishmentCity) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'La ciudad del establecimiento es requerida'
+      });
+    }
+
+    // Generate unique slug from name
+    const baseSlug = establishmentName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    
+    // Check for existing slug and make unique if needed
+    let slug = baseSlug;
+    let slugCounter = 1;
+    let existingSlug = await Establishment.findOne({ where: { slug }, transaction });
+    while (existingSlug) {
+      slug = `${baseSlug}-${slugCounter}`;
+      slugCounter++;
+      existingSlug = await Establishment.findOne({ where: { slug }, transaction });
+    }
+
     // Create the establishment
     const establishment = await Establishment.create({
       userId,
-      name: basicInfo?.name || '',
+      name: establishmentName,
+      slug,
       description: basicInfo?.description || '',
       phone: basicInfo?.phone || '',
       email: basicInfo?.email || '',
-      address: location?.address || '',
-      city: location?.city || '',
+      address: establishmentAddress,
+      city: establishmentCity,
       latitude,
       longitude,
       amenities: amenities || [],
+      sports: req.body.sports || [],
       openingHours: schedule || {},
       images: images?.photos || [],
       isActive: true,
-      isVerified: false
+      isVerified: false,
+      // Add default booking configuration
+      requireDeposit: true,
+      depositType: 'percentage',
+      depositPercentage: 50,
+      allowFullPayment: false,
+      maxAdvanceBookingDays: 30,
+      minAdvanceBookingHours: 2,
+      allowSameDayBooking: true,
+      cancellationDeadlineHours: 24,
+      cancellationPolicy: 'partial_refund',
+      refundPercentage: 50,
+      noShowPenalty: true,
+      noShowPenaltyType: 'deposit_only'
     }, { transaction });
 
     // Create courts if provided
