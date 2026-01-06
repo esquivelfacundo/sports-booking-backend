@@ -54,8 +54,8 @@ const createEstablishment = async (req, res) => {
 
       // Create new establishment user
       const newUser = await User.create({
-        firstName: name.split(' ')[0] || 'Admin',
-        lastName: name.split(' ').slice(1).join(' ') || 'Establecimiento',
+        firstName: req.body.adminFirstName || 'Admin',
+        lastName: req.body.adminLastName || 'Establecimiento',
         email: accessEmail,
         password: hashedPassword,
         userType: 'establishment',
