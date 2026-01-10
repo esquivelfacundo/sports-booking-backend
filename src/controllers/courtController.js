@@ -1,4 +1,4 @@
-const { Court, Establishment, TimeSlot, Booking } = require('../models');
+const { Court, Establishment, TimeSlot, Booking, CourtPriceSchedule } = require('../models');
 const { Op } = require('sequelize');
 
 // Helper function to verify establishment access (includes staff)
@@ -30,7 +30,8 @@ const createCourt = async (req, res) => {
       amenities,
       dimensions,
       description,
-      rules
+      rules,
+      priceSchedules
     } = req.body;
 
     // Verify establishment access (includes staff)
@@ -59,9 +60,31 @@ const createCourt = async (req, res) => {
       rules: rules || []
     });
 
+    // Create price schedules if provided
+    if (priceSchedules && Array.isArray(priceSchedules) && priceSchedules.length > 0) {
+      const schedulePromises = priceSchedules.map((schedule, index) => 
+        CourtPriceSchedule.create({
+          courtId: court.id,
+          name: schedule.name || `Franja ${index + 1}`,
+          startTime: schedule.startTime,
+          endTime: schedule.endTime,
+          pricePerHour: schedule.pricePerHour,
+          daysOfWeek: schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+          priority: schedule.priority || index,
+          isActive: true
+        })
+      );
+      await Promise.all(schedulePromises);
+    }
+
+    // Fetch court with price schedules
+    const courtWithSchedules = await Court.findByPk(court.id, {
+      include: [{ model: CourtPriceSchedule, as: 'priceSchedules' }]
+    });
+
     res.status(201).json({
       message: 'Court created successfully',
-      court
+      court: courtWithSchedules
     });
 
   } catch (error) {
@@ -241,12 +264,40 @@ const updateCourt = async (req, res) => {
       });
     }
 
-    const updateData = req.body;
+    const { priceSchedules, ...updateData } = req.body;
     await court.update(updateData);
+
+    // Update price schedules if provided
+    if (priceSchedules && Array.isArray(priceSchedules)) {
+      // Delete existing schedules
+      await CourtPriceSchedule.destroy({ where: { courtId: court.id } });
+      
+      // Create new schedules
+      if (priceSchedules.length > 0) {
+        const schedulePromises = priceSchedules.map((schedule, index) => 
+          CourtPriceSchedule.create({
+            courtId: court.id,
+            name: schedule.name || `Franja ${index + 1}`,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            pricePerHour: schedule.pricePerHour,
+            daysOfWeek: schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+            priority: schedule.priority || index,
+            isActive: true
+          })
+        );
+        await Promise.all(schedulePromises);
+      }
+    }
+
+    // Fetch updated court with price schedules
+    const updatedCourt = await Court.findByPk(court.id, {
+      include: [{ model: CourtPriceSchedule, as: 'priceSchedules' }]
+    });
 
     res.json({
       message: 'Court updated successfully',
-      court
+      court: updatedCourt
     });
 
   } catch (error) {
