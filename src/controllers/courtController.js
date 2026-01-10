@@ -319,14 +319,20 @@ const updateCourt = async (req, res) => {
 
     // Update price schedules if provided
     if (priceSchedules && Array.isArray(priceSchedules)) {
+      console.log('📋 Updating price schedules for court:', court.id);
+      console.log('📋 Number of schedules to create:', priceSchedules.length);
+      console.log('📋 Schedules data:', JSON.stringify(priceSchedules, null, 2));
+      
       try {
         // Delete existing schedules
-        await CourtPriceSchedule.destroy({ where: { courtId: court.id } });
+        const deletedCount = await CourtPriceSchedule.destroy({ where: { courtId: court.id } });
+        console.log('🗑️  Deleted', deletedCount, 'existing schedules');
         
         // Create new schedules
         if (priceSchedules.length > 0) {
           for (const [index, schedule] of priceSchedules.entries()) {
-            await CourtPriceSchedule.create({
+            console.log(`➕ Creating schedule ${index + 1}:`, schedule);
+            const created = await CourtPriceSchedule.create({
               courtId: court.id,
               name: schedule.name || `Franja ${index + 1}`,
               startTime: schedule.startTime,
@@ -336,12 +342,17 @@ const updateCourt = async (req, res) => {
               priority: schedule.priority || index,
               isActive: true
             });
+            console.log('✅ Created schedule:', created.id);
           }
+          console.log('✅ All price schedules created successfully');
         }
       } catch (scheduleError) {
-        console.error('Error updating price schedules:', scheduleError.message);
+        console.error('❌ Error updating price schedules:', scheduleError.message);
+        console.error('❌ Stack trace:', scheduleError.stack);
         // Continue without failing - schedules table might not exist yet
       }
+    } else {
+      console.log('⚠️  No price schedules provided or invalid format');
     }
 
     // Fetch updated court with price schedules
