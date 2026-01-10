@@ -327,6 +327,8 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
     
     while (currentMinute < bookingEndMinutes) {
       // Find the schedule that applies to this minute
+      // Schedules are inclusive at start, exclusive at end [start, end)
+      // This means 08:00-18:00 includes minutes 08:00-17:59, and 18:00-23:00 includes 18:00-22:59
       let appliedSchedule = null;
       
       for (const schedule of applicableSchedules) {
