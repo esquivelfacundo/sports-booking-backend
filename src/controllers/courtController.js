@@ -198,13 +198,16 @@ const getCourts = async (req, res) => {
     res.json({ success: true, data: courts });
 
   } catch (error) {
-    console.error('Get courts error:', error);
+    console.error('❌ Get courts error:', error);
+    console.error('❌ Stack trace:', error.stack);
     res.status(500).json({
       error: 'Failed to fetch courts',
       message: 'An error occurred while fetching courts'
     });
   }
 };
+
+console.log('🔧 courtController.js loaded - VERSION 2.0 with priceSchedules support');
 
 const getCourtById = async (req, res) => {
   try {
