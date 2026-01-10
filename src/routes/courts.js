@@ -10,6 +10,14 @@ const {
   deleteCourt,
   getCourtAvailability
 } = require('../controllers/courtController');
+const {
+  getCourtPriceSchedules,
+  createPriceSchedule,
+  updatePriceSchedule,
+  deletePriceSchedule,
+  bulkUpdatePriceSchedules,
+  calculatePriceEndpoint
+} = require('../controllers/priceScheduleController');
 
 const router = express.Router();
 
@@ -139,5 +147,13 @@ router.get('/:id/availability', availabilityValidation, handleValidationErrors, 
 router.post('/', authenticateToken, requireRole(['establishment', 'admin']), createCourtValidation, handleValidationErrors, createCourt);
 router.put('/:id', authenticateToken, requireRole(['establishment', 'admin']), updateCourtValidation, handleValidationErrors, updateCourt);
 router.delete('/:id', authenticateToken, requireRole(['establishment', 'admin']), deleteCourt);
+
+// Price Schedule routes
+router.get('/:courtId/price-schedules', getCourtPriceSchedules);
+router.get('/:courtId/calculate-price', calculatePriceEndpoint);
+router.post('/:courtId/price-schedules', authenticateToken, requireRole(['establishment', 'admin']), createPriceSchedule);
+router.put('/:courtId/price-schedules/bulk', authenticateToken, requireRole(['establishment', 'admin']), bulkUpdatePriceSchedules);
+router.put('/price-schedules/:id', authenticateToken, requireRole(['establishment', 'admin']), updatePriceSchedule);
+router.delete('/price-schedules/:id', authenticateToken, requireRole(['establishment', 'admin']), deletePriceSchedule);
 
 module.exports = router;

@@ -41,6 +41,7 @@ const EstablishmentIntegration = require('./EstablishmentIntegration')(sequelize
 const Coupon = require('./Coupon')(sequelize, DataTypes);
 const CouponUsage = require('./CouponUsage')(sequelize, DataTypes);
 const RecurringBookingGroup = require('./RecurringBookingGroup')(sequelize, DataTypes);
+const CourtPriceSchedule = require('./CourtPriceSchedule')(sequelize, DataTypes);
 
 // Define associations
 const defineAssociations = () => {
@@ -94,6 +95,10 @@ const defineAssociations = () => {
   Court.hasMany(Booking, { foreignKey: 'courtId', as: 'bookings' });
   Court.hasMany(Review, { foreignKey: 'courtId', as: 'reviews' });
   Court.hasMany(AvailableMatch, { foreignKey: 'courtId', as: 'matches' });
+  Court.hasMany(CourtPriceSchedule, { foreignKey: 'courtId', as: 'priceSchedules' });
+
+  // CourtPriceSchedule associations
+  CourtPriceSchedule.belongsTo(Court, { foreignKey: 'courtId', as: 'court' });
 
   // TimeSlot associations
   TimeSlot.belongsTo(Court, { foreignKey: 'courtId', as: 'court' });
@@ -332,5 +337,6 @@ module.exports = {
   EstablishmentIntegration,
   Coupon,
   CouponUsage,
-  RecurringBookingGroup
+  RecurringBookingGroup,
+  CourtPriceSchedule
 };
