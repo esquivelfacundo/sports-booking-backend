@@ -172,46 +172,28 @@ const getCourts = async (req, res) => {
       where.surface = surface;
     }
 
-    let courts;
-    try {
-      courts = await Court.findAll({
-        where,
-        include: [
-          {
-            model: Establishment,
-            as: 'establishment',
-            attributes: ['id', 'name', 'address', 'city']
-          },
-          {
-            model: CourtPriceSchedule,
-            as: 'priceSchedules',
-            where: { isActive: true },
-            required: false
-          }
-        ],
-        order: [['name', 'ASC']]
-      });
-      console.log(`✅ Loaded ${courts.length} courts with price schedules`);
-      courts.forEach(court => {
-        console.log(`  - ${court.name}: ${court.priceSchedules?.length || 0} schedules`);
-      });
-    } catch (e) {
-      console.error('❌ Error loading courts with schedules:', e.message);
-      console.error('Stack:', e.stack);
-      // Fallback without schedules if table doesn't exist
-      courts = await Court.findAll({
-        where,
-        include: [
-          {
-            model: Establishment,
-            as: 'establishment',
-            attributes: ['id', 'name', 'address', 'city']
-          }
-        ],
-        order: [['name', 'ASC']]
-      });
-      console.log(`⚠️  Loaded ${courts.length} courts WITHOUT schedules (fallback)`);
-    }
+    const courts = await Court.findAll({
+      where,
+      include: [
+        {
+          model: Establishment,
+          as: 'establishment',
+          attributes: ['id', 'name', 'address', 'city']
+        },
+        {
+          model: CourtPriceSchedule,
+          as: 'priceSchedules',
+          required: false
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+    
+    console.log(`✅ Loaded ${courts.length} courts with price schedules`);
+    courts.forEach(court => {
+      const activeSchedules = court.priceSchedules?.filter(s => s.isActive) || [];
+      console.log(`  - ${court.name}: ${activeSchedules.length} active schedules (${court.priceSchedules?.length || 0} total)`);
+    });
 
     res.json({ success: true, data: courts });
 
