@@ -191,7 +191,13 @@ const getCourts = async (req, res) => {
         ],
         order: [['name', 'ASC']]
       });
+      console.log(`✅ Loaded ${courts.length} courts with price schedules`);
+      courts.forEach(court => {
+        console.log(`  - ${court.name}: ${court.priceSchedules?.length || 0} schedules`);
+      });
     } catch (e) {
+      console.error('❌ Error loading courts with schedules:', e.message);
+      console.error('Stack:', e.stack);
       // Fallback without schedules if table doesn't exist
       courts = await Court.findAll({
         where,
@@ -204,6 +210,7 @@ const getCourts = async (req, res) => {
         ],
         order: [['name', 'ASC']]
       });
+      console.log(`⚠️  Loaded ${courts.length} courts WITHOUT schedules (fallback)`);
     }
 
     res.json({ success: true, data: courts });
