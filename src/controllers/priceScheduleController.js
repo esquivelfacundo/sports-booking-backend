@@ -309,7 +309,7 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
           endTime,
           minutes: durationMinutes,
           pricePerHour: parseFloat(court.pricePerHour),
-          subtotal: totalPrice
+          amount: totalPrice
         }]
       };
     }
@@ -349,7 +349,7 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
         const existingEntry = breakdown.find(b => b.scheduleId === appliedSchedule.id);
         if (existingEntry) {
           existingEntry.minutes += segmentMinutes;
-          existingEntry.subtotal += segmentPrice;
+          existingEntry.amount += segmentPrice;
         } else {
           breakdown.push({
             scheduleId: appliedSchedule.id,
@@ -358,7 +358,7 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
             endTime: minutesToTime(segmentEnd),
             minutes: segmentMinutes,
             pricePerHour: parseFloat(appliedSchedule.pricePerHour),
-            subtotal: segmentPrice
+            amount: segmentPrice
           });
         }
 
@@ -375,7 +375,7 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
         const existingEntry = breakdown.find(b => b.scheduleName === 'Precio base');
         if (existingEntry) {
           existingEntry.minutes += segmentMinutes;
-          existingEntry.subtotal += segmentPrice;
+          existingEntry.amount += segmentPrice;
         } else {
           breakdown.push({
             scheduleId: null,
@@ -384,7 +384,7 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
             endTime: minutesToTime(segmentEnd),
             minutes: segmentMinutes,
             pricePerHour: parseFloat(court.pricePerHour),
-            subtotal: segmentPrice
+            amount: segmentPrice
           });
         }
 
