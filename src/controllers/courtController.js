@@ -62,25 +62,33 @@ const createCourt = async (req, res) => {
 
     // Create price schedules if provided
     if (priceSchedules && Array.isArray(priceSchedules) && priceSchedules.length > 0) {
-      const schedulePromises = priceSchedules.map((schedule, index) => 
-        CourtPriceSchedule.create({
-          courtId: court.id,
-          name: schedule.name || `Franja ${index + 1}`,
-          startTime: schedule.startTime,
-          endTime: schedule.endTime,
-          pricePerHour: schedule.pricePerHour,
-          daysOfWeek: schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
-          priority: schedule.priority || index,
-          isActive: true
-        })
-      );
-      await Promise.all(schedulePromises);
+      try {
+        for (const [index, schedule] of priceSchedules.entries()) {
+          await CourtPriceSchedule.create({
+            courtId: court.id,
+            name: schedule.name || `Franja ${index + 1}`,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            pricePerHour: parseFloat(schedule.pricePerHour) || 0,
+            daysOfWeek: schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+            priority: schedule.priority || index,
+            isActive: true
+          });
+        }
+      } catch (scheduleError) {
+        console.error('Error creating price schedules:', scheduleError.message);
+      }
     }
 
     // Fetch court with price schedules
-    const courtWithSchedules = await Court.findByPk(court.id, {
-      include: [{ model: CourtPriceSchedule, as: 'priceSchedules' }]
-    });
+    let courtWithSchedules;
+    try {
+      courtWithSchedules = await Court.findByPk(court.id, {
+        include: [{ model: CourtPriceSchedule, as: 'priceSchedules' }]
+      });
+    } catch (e) {
+      courtWithSchedules = court;
+    }
 
     res.status(201).json({
       message: 'Court created successfully',
@@ -164,23 +172,39 @@ const getCourts = async (req, res) => {
       where.surface = surface;
     }
 
-    const courts = await Court.findAll({
-      where,
-      include: [
-        {
-          model: Establishment,
-          as: 'establishment',
-          attributes: ['id', 'name', 'address', 'city']
-        },
-        {
-          model: CourtPriceSchedule,
-          as: 'priceSchedules',
-          where: { isActive: true },
-          required: false
-        }
-      ],
-      order: [['name', 'ASC']]
-    });
+    let courts;
+    try {
+      courts = await Court.findAll({
+        where,
+        include: [
+          {
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'address', 'city']
+          },
+          {
+            model: CourtPriceSchedule,
+            as: 'priceSchedules',
+            where: { isActive: true },
+            required: false
+          }
+        ],
+        order: [['name', 'ASC']]
+      });
+    } catch (e) {
+      // Fallback without schedules if table doesn't exist
+      courts = await Court.findAll({
+        where,
+        include: [
+          {
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'address', 'city']
+          }
+        ],
+        order: [['name', 'ASC']]
+      });
+    }
 
     res.json({ courts });
 
@@ -197,22 +221,36 @@ const getCourtById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const court = await Court.findOne({
-      where: { id, isActive: true },
-      include: [
-        {
-          model: Establishment,
-          as: 'establishment',
-          attributes: ['id', 'name', 'address', 'city', 'phone', 'email']
-        },
-        {
-          model: CourtPriceSchedule,
-          as: 'priceSchedules',
-          where: { isActive: true },
-          required: false
-        }
-      ]
-    });
+    let court;
+    try {
+      court = await Court.findOne({
+        where: { id, isActive: true },
+        include: [
+          {
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'address', 'city', 'phone', 'email']
+          },
+          {
+            model: CourtPriceSchedule,
+            as: 'priceSchedules',
+            where: { isActive: true },
+            required: false
+          }
+        ]
+      });
+    } catch (e) {
+      court = await Court.findOne({
+        where: { id, isActive: true },
+        include: [
+          {
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'address', 'city', 'phone', 'email']
+          }
+        ]
+      });
+    }
 
     if (!court) {
       return res.status(404).json({
@@ -281,31 +319,41 @@ const updateCourt = async (req, res) => {
 
     // Update price schedules if provided
     if (priceSchedules && Array.isArray(priceSchedules)) {
-      // Delete existing schedules
-      await CourtPriceSchedule.destroy({ where: { courtId: court.id } });
-      
-      // Create new schedules
-      if (priceSchedules.length > 0) {
-        const schedulePromises = priceSchedules.map((schedule, index) => 
-          CourtPriceSchedule.create({
-            courtId: court.id,
-            name: schedule.name || `Franja ${index + 1}`,
-            startTime: schedule.startTime,
-            endTime: schedule.endTime,
-            pricePerHour: schedule.pricePerHour,
-            daysOfWeek: schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
-            priority: schedule.priority || index,
-            isActive: true
-          })
-        );
-        await Promise.all(schedulePromises);
+      try {
+        // Delete existing schedules
+        await CourtPriceSchedule.destroy({ where: { courtId: court.id } });
+        
+        // Create new schedules
+        if (priceSchedules.length > 0) {
+          for (const [index, schedule] of priceSchedules.entries()) {
+            await CourtPriceSchedule.create({
+              courtId: court.id,
+              name: schedule.name || `Franja ${index + 1}`,
+              startTime: schedule.startTime,
+              endTime: schedule.endTime,
+              pricePerHour: parseFloat(schedule.pricePerHour) || 0,
+              daysOfWeek: schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+              priority: schedule.priority || index,
+              isActive: true
+            });
+          }
+        }
+      } catch (scheduleError) {
+        console.error('Error updating price schedules:', scheduleError.message);
+        // Continue without failing - schedules table might not exist yet
       }
     }
 
     // Fetch updated court with price schedules
-    const updatedCourt = await Court.findByPk(court.id, {
-      include: [{ model: CourtPriceSchedule, as: 'priceSchedules' }]
-    });
+    let updatedCourt;
+    try {
+      updatedCourt = await Court.findByPk(court.id, {
+        include: [{ model: CourtPriceSchedule, as: 'priceSchedules' }]
+      });
+    } catch (e) {
+      // Fallback without schedules if table doesn't exist
+      updatedCourt = await Court.findByPk(court.id);
+    }
 
     res.json({
       message: 'Court updated successfully',
@@ -313,10 +361,10 @@ const updateCourt = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update court error:', error);
+    console.error('Update court error:', error.message, error.stack);
     res.status(500).json({
       error: 'Failed to update court',
-      message: 'An error occurred while updating the court'
+      message: error.message || 'An error occurred while updating the court'
     });
   }
 };
