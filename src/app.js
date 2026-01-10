@@ -189,6 +189,11 @@ const startServer = async () => {
     if (process.env.NODE_ENV === 'development') {
       await sequelize.sync({ alter: true });
       console.log('✅ Database models synchronized');
+    } else {
+      // In production, sync only new tables that might be missing
+      const { CourtPriceSchedule } = require('./models');
+      await CourtPriceSchedule.sync({ alter: true });
+      console.log('✅ CourtPriceSchedule table synchronized');
     }
     
     const PORT = process.env.PORT || 3001;
