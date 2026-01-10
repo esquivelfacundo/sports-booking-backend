@@ -106,8 +106,11 @@ const createCourt = async (req, res) => {
 
 // Get all courts (general listing)
 const getAllCourts = async (req, res) => {
+  console.log('🚨 getAllCourts CALLED - VERSION 3.0');
+  console.log('🚨 Request query:', req.query);
+  
   try {
-    const { sport, isIndoor, surface, establishmentId } = req.query;
+    const { establishmentId, sport, isIndoor, surface } = req.query;
 
     const where = { isActive: true };
 
@@ -127,6 +130,8 @@ const getAllCourts = async (req, res) => {
       where.surface = surface;
     }
 
+    console.log('🔍 Loading courts with priceSchedules...');
+    
     const courts = await Court.findAll({
       where,
       include: [
@@ -134,9 +139,20 @@ const getAllCourts = async (req, res) => {
           model: Establishment,
           as: 'establishment',
           attributes: ['id', 'name', 'address', 'city', 'images']
+        },
+        {
+          model: CourtPriceSchedule,
+          as: 'priceSchedules',
+          required: false
         }
       ],
       order: [['name', 'ASC']]
+    });
+
+    console.log(`✅ Loaded ${courts.length} courts`);
+    courts.forEach(court => {
+      const schedules = court.priceSchedules || [];
+      console.log(`  - ${court.name}: ${schedules.length} schedules`);
     });
 
     res.json({ 
@@ -154,6 +170,10 @@ const getAllCourts = async (req, res) => {
 };
 
 const getCourts = async (req, res) => {
+  console.log('🚨 getCourts CALLED - VERSION 3.0');
+  console.log('🚨 Request params:', req.params);
+  console.log('🚨 Request query:', req.query);
+  
   try {
     const { establishmentId } = req.params;
     const { sport, isIndoor, surface } = req.query;
