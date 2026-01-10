@@ -172,28 +172,52 @@ const getCourts = async (req, res) => {
       where.surface = surface;
     }
 
-    const courts = await Court.findAll({
-      where,
-      include: [
-        {
-          model: Establishment,
-          as: 'establishment',
-          attributes: ['id', 'name', 'address', 'city']
-        },
-        {
-          model: CourtPriceSchedule,
-          as: 'priceSchedules',
-          required: false
-        }
-      ],
-      order: [['name', 'ASC']]
-    });
+    console.log('🔍 Attempting to load courts with priceSchedules...');
+    console.log('🔍 CourtPriceSchedule model:', CourtPriceSchedule ? 'EXISTS' : 'MISSING');
     
-    console.log(`✅ Loaded ${courts.length} courts with price schedules`);
-    courts.forEach(court => {
-      const activeSchedules = court.priceSchedules?.filter(s => s.isActive) || [];
-      console.log(`  - ${court.name}: ${activeSchedules.length} active schedules (${court.priceSchedules?.length || 0} total)`);
-    });
+    let courts;
+    try {
+      courts = await Court.findAll({
+        where,
+        include: [
+          {
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'address', 'city']
+          },
+          {
+            model: CourtPriceSchedule,
+            as: 'priceSchedules',
+            required: false
+          }
+        ],
+        order: [['name', 'ASC']]
+      });
+      
+      console.log(`✅ Loaded ${courts.length} courts with price schedules`);
+      courts.forEach(court => {
+        const activeSchedules = court.priceSchedules?.filter(s => s.isActive) || [];
+        console.log(`  - ${court.name}: ${activeSchedules.length} active schedules (${court.priceSchedules?.length || 0} total)`);
+      });
+    } catch (includeError) {
+      console.error('❌ Error loading courts WITH priceSchedules:', includeError.message);
+      console.error('❌ Falling back to courts WITHOUT priceSchedules');
+      
+      // Fallback: load courts without schedules
+      courts = await Court.findAll({
+        where,
+        include: [
+          {
+            model: Establishment,
+            as: 'establishment',
+            attributes: ['id', 'name', 'address', 'city']
+          }
+        ],
+        order: [['name', 'ASC']]
+      });
+      
+      console.log(`⚠️  Loaded ${courts.length} courts WITHOUT schedules (fallback)`);
+    }
 
     res.json({ success: true, data: courts });
 
