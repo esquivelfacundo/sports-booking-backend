@@ -171,6 +171,12 @@ const getCourts = async (req, res) => {
           model: Establishment,
           as: 'establishment',
           attributes: ['id', 'name', 'address', 'city']
+        },
+        {
+          model: CourtPriceSchedule,
+          as: 'priceSchedules',
+          where: { isActive: true },
+          required: false
         }
       ],
       order: [['name', 'ASC']]
@@ -198,6 +204,12 @@ const getCourtById = async (req, res) => {
           model: Establishment,
           as: 'establishment',
           attributes: ['id', 'name', 'address', 'city', 'phone', 'email']
+        },
+        {
+          model: CourtPriceSchedule,
+          as: 'priceSchedules',
+          where: { isActive: true },
+          required: false
         }
       ]
     });
