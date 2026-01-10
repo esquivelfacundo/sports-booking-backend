@@ -447,10 +447,8 @@ const calculatePriceEndpoint = async (req, res) => {
 
     const result = await calculateBookingPrice(courtId, startTime, endTime, date);
 
-    res.json({
-      success: true,
-      data: result
-    });
+    // Return the result directly for frontend compatibility
+    res.json(result);
   } catch (error) {
     console.error('Error calculating price:', error);
     res.status(500).json({
