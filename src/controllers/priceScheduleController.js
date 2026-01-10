@@ -273,8 +273,10 @@ const bulkUpdatePriceSchedules = async (req, res) => {
  */
 const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) => {
   try {
-    // Get day of week (0 = Sunday, 6 = Saturday)
-    const date = new Date(bookingDate);
+    // Get day of week (0 = Sunday, 6 = Saturday) in Argentina timezone (UTC-3)
+    // Parse the date string as local date to avoid timezone issues
+    const [year, month, day] = bookingDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // Create date in local timezone
     const dayOfWeek = date.getDay();
 
     // Get all active price schedules for this court that apply to this day
