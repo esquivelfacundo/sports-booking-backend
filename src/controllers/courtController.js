@@ -206,7 +206,7 @@ const getCourts = async (req, res) => {
       });
     }
 
-    res.json({ courts });
+    res.json({ success: true, data: courts });
 
   } catch (error) {
     console.error('Get courts error:', error);
