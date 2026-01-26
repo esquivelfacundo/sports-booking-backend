@@ -116,6 +116,7 @@ app.use('/api/expense-categories', require('./routes/expense-categories'));
 app.use('/api/cash-registers', require('./routes/cash-registers'));
 app.use('/api/cash-register-movements', require('./routes/cash-register-movements'));
 app.use('/api/current-accounts', require('./routes/currentAccounts'));
+app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/amenities', require('./routes/amenities'));
 app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/v1', require('./routes/api-v1'));

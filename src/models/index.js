@@ -42,6 +42,7 @@ const Coupon = require('./Coupon')(sequelize, DataTypes);
 const CouponUsage = require('./CouponUsage')(sequelize, DataTypes);
 const RecurringBookingGroup = require('./RecurringBookingGroup')(sequelize, DataTypes);
 const CourtPriceSchedule = require('./CourtPriceSchedule')(sequelize, DataTypes);
+const Expense = require('./Expense')(sequelize, DataTypes);
 
 // Define associations
 const defineAssociations = () => {
@@ -292,6 +293,14 @@ const defineAssociations = () => {
   Client.hasMany(RecurringBookingGroup, { foreignKey: 'clientId', as: 'recurringBookingGroups' });
   Court.hasMany(RecurringBookingGroup, { foreignKey: 'courtId', as: 'recurringBookingGroups' });
   Booking.belongsTo(RecurringBookingGroup, { foreignKey: 'recurringGroupId', as: 'recurringGroup' });
+
+  // Expense associations
+  Expense.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Expense.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  Expense.belongsTo(CashRegister, { foreignKey: 'cashRegisterId', as: 'cashRegister' });
+  Establishment.hasMany(Expense, { foreignKey: 'establishmentId', as: 'expenses' });
+  User.hasMany(Expense, { foreignKey: 'userId', as: 'expenses' });
+  CashRegister.hasMany(Expense, { foreignKey: 'cashRegisterId', as: 'expenses' });
 };
 
 // Initialize associations
@@ -338,5 +347,6 @@ module.exports = {
   Coupon,
   CouponUsage,
   RecurringBookingGroup,
-  CourtPriceSchedule
+  CourtPriceSchedule,
+  Expense
 };
