@@ -305,7 +305,182 @@ const getPendingPayments = async (req, res) => {
   }
 };
 
+/**
+ * Get sales by product and payment method
+ */
+const getSalesByProductAndPaymentMethod = async (req, res) => {
+  try {
+    const { establishmentId } = req.params;
+    const { period = 'month' } = req.query;
+
+    // Calculate date range based on period
+    const now = new Date();
+    let start;
+    
+    switch (period) {
+      case 'week':
+        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'quarter':
+        start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      case 'year':
+        start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+      case 'month':
+      default:
+        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+    }
+
+    const { Order, OrderItem, OrderPayment, Product, PaymentMethod } = require('../models');
+
+    // Get all orders in the period
+    const orders = await Order.findAll({
+      where: {
+        establishmentId,
+        createdAt: { [Op.gte]: start },
+        status: { [Op.in]: ['completed', 'pending'] }
+      },
+      include: [
+        {
+          model: OrderItem,
+          as: 'items',
+          include: [
+            {
+              model: Product,
+              as: 'product',
+              attributes: ['id', 'name']
+            }
+          ]
+        },
+        {
+          model: OrderPayment,
+          as: 'payments',
+          attributes: ['id', 'amount', 'paymentMethod']
+        }
+      ]
+    });
+
+    // Get payment methods for the establishment
+    const paymentMethods = await PaymentMethod.findAll({
+      where: { establishmentId, isActive: true },
+      order: [['sortOrder', 'ASC']]
+    });
+
+    // Create a map to store sales by product and payment method
+    const salesByProduct = {};
+
+    orders.forEach(order => {
+      const orderPayments = order.payments || [];
+      
+      order.items.forEach(item => {
+        const productId = item.productId;
+        const productName = item.product?.name || item.productName;
+        
+        if (!salesByProduct[productId]) {
+          salesByProduct[productId] = {
+            productId,
+            productName,
+            totalQuantity: 0,
+            totalAmount: 0,
+            byPaymentMethod: {}
+          };
+        }
+
+        const itemTotal = parseFloat(item.totalPrice || 0);
+        salesByProduct[productId].totalQuantity += item.quantity;
+        salesByProduct[productId].totalAmount += itemTotal;
+
+        // Distribute the item total across payment methods proportionally
+        if (orderPayments.length > 0) {
+          const orderTotal = parseFloat(order.total || 0);
+          const itemProportion = orderTotal > 0 ? itemTotal / orderTotal : 0;
+
+          orderPayments.forEach(payment => {
+            const method = payment.paymentMethod;
+            const paymentAmount = parseFloat(payment.amount || 0);
+            const itemPaymentAmount = paymentAmount * itemProportion;
+
+            if (!salesByProduct[productId].byPaymentMethod[method]) {
+              salesByProduct[productId].byPaymentMethod[method] = 0;
+            }
+            salesByProduct[productId].byPaymentMethod[method] += itemPaymentAmount;
+          });
+        } else {
+          // If no payments, use the order's paymentMethod
+          const method = order.paymentMethod || 'pending';
+          if (!salesByProduct[productId].byPaymentMethod[method]) {
+            salesByProduct[productId].byPaymentMethod[method] = 0;
+          }
+          salesByProduct[productId].byPaymentMethod[method] += itemTotal;
+        }
+      });
+    });
+
+    // Convert to array and format
+    const productSales = Object.values(salesByProduct).map(product => {
+      const paymentMethodBreakdown = {};
+      
+      // Initialize all payment methods with 0
+      paymentMethods.forEach(pm => {
+        paymentMethodBreakdown[pm.code] = {
+          name: pm.name,
+          amount: 0
+        };
+      });
+
+      // Fill in actual amounts
+      Object.entries(product.byPaymentMethod).forEach(([method, amount]) => {
+        if (paymentMethodBreakdown[method]) {
+          paymentMethodBreakdown[method].amount = amount;
+        } else {
+          // Handle legacy or unmapped payment methods
+          paymentMethodBreakdown[method] = {
+            name: getPaymentMethodLabel(method),
+            amount
+          };
+        }
+      });
+
+      return {
+        productId: product.productId,
+        productName: product.productName,
+        totalQuantity: product.totalQuantity,
+        totalAmount: product.totalAmount,
+        paymentMethods: paymentMethodBreakdown
+      };
+    });
+
+    // Sort by total amount descending
+    productSales.sort((a, b) => b.totalAmount - a.totalAmount);
+
+    res.json({
+      success: true,
+      period: {
+        start: start.toISOString().split('T')[0],
+        end: now.toISOString().split('T')[0],
+        label: period
+      },
+      paymentMethods: paymentMethods.map(pm => ({
+        code: pm.code,
+        name: pm.name,
+        icon: pm.icon
+      })),
+      products: productSales
+    });
+
+  } catch (error) {
+    console.error('Sales by product and payment method error:', error);
+    res.status(500).json({
+      error: 'Failed to get sales by product and payment method',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   getFinancialSummary,
-  getPendingPayments
+  getPendingPayments,
+  getSalesByProductAndPaymentMethod
 };
