@@ -49,7 +49,7 @@ const getPurchasesByProduct = async (req, res) => {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'name']
+          attributes: ['id', 'firstName', 'lastName', 'email']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -80,6 +80,12 @@ const getPurchasesByProduct = async (req, res) => {
 
       purchasesByProduct[productId].totalQuantity += quantity;
       purchasesByProduct[productId].totalCost += totalCost;
+      
+      // Build user name from firstName and lastName
+      const userName = movement.user 
+        ? `${movement.user.firstName || ''} ${movement.user.lastName || ''}`.trim() 
+        : undefined;
+      
       purchasesByProduct[productId].purchases.push({
         id: movement.id,
         date: movement.createdAt,
@@ -88,7 +94,7 @@ const getPurchasesByProduct = async (req, res) => {
         totalCost,
         invoiceNumber: movement.invoiceNumber,
         notes: movement.notes,
-        user: movement.user?.name
+        user: userName
       });
     });
 
