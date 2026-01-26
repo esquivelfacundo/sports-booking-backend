@@ -192,9 +192,10 @@ const startServer = async () => {
       console.log('✅ Database models synchronized');
     } else {
       // In production, sync only new tables that might be missing
-      const { CourtPriceSchedule } = require('./models');
+      const { CourtPriceSchedule, Expense } = require('./models');
       await CourtPriceSchedule.sync({ alter: true });
-      console.log('✅ CourtPriceSchedule table synchronized');
+      await Expense.sync({ alter: true });
+      console.log('✅ CourtPriceSchedule and Expense tables synchronized');
     }
     
     const PORT = process.env.PORT || 3001;
