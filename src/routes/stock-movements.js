@@ -4,6 +4,7 @@ const { StockMovement, Product, ProductCategory, User, Establishment } = require
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
+const { getPurchasesByProduct } = require('../controllers/stockController');
 
 // Get stock movements
 router.get('/', authenticateToken, async (req, res) => {
@@ -300,5 +301,8 @@ router.get('/summary', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch stock summary' });
   }
 });
+
+// Get purchases by product
+router.get('/purchases-by-product/:establishmentId', authenticateToken, getPurchasesByProduct);
 
 module.exports = router;
