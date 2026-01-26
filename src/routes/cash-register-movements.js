@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { CashRegisterMovement, CashRegister, Establishment, User, Order, Booking, ExpenseCategory } = require('../models');
+const { CashRegisterMovement, CashRegister, Establishment, User, Order, Booking, ExpenseCategory, Expense } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
@@ -117,28 +117,50 @@ router.post('/expense', authenticateToken, async (req, res) => {
 
     if (!cashRegisterId || !amount || !paymentMethod) {
       await transaction.rollback();
-      return res.status(400).json({ error: 'cashRegisterId, amount, and paymentMethod are required' });
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Get cash register
-    const cashRegister = await CashRegister.findByPk(cashRegisterId);
+    const cashRegister = await CashRegister.findByPk(cashRegisterId, { transaction });
     if (!cashRegister) {
       await transaction.rollback();
       return res.status(404).json({ error: 'Cash register not found' });
     }
 
-    if (cashRegister.status !== 'open') {
+    if (cashRegister.closedAt) {
       await transaction.rollback();
-      return res.status(400).json({ error: 'Cash register is not open' });
+      return res.status(400).json({ error: 'Cash register is closed' });
     }
 
     // Verify access
-    if (cashRegister.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const establishment = await Establishment.findByPk(cashRegister.establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
       await transaction.rollback();
       return res.status(403).json({ error: 'Access denied' });
     }
 
     const expenseAmount = parseFloat(amount);
+
+    // Get expense category name if provided
+    let categoryName = 'Otros';
+    if (expenseCategoryId) {
+      const expenseCategory = await ExpenseCategory.findByPk(expenseCategoryId);
+      if (expenseCategory) {
+        categoryName = expenseCategory.name;
+      }
+    }
+
+    // Create expense record in Expense table
+    const expense = await Expense.create({
+      establishmentId: cashRegister.establishmentId,
+      cashRegisterId,
+      userId: req.user.id,
+      category: categoryName,
+      description: description || 'Gasto desde caja',
+      amount: expenseAmount,
+      paymentMethod,
+      notes,
+      expenseDate: new Date().toISOString().split('T')[0]
+    }, { transaction });
 
     // Create movement (negative amount for expense)
     const movement = await CashRegisterMovement.create({
