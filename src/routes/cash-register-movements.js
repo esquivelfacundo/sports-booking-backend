@@ -143,24 +143,29 @@ router.post('/expense', authenticateToken, async (req, res) => {
     // Get expense category name if provided
     let categoryName = 'Otros';
     if (expenseCategoryId) {
-      const expenseCategory = await ExpenseCategory.findByPk(expenseCategoryId);
+      const expenseCategory = await ExpenseCategory.findByPk(expenseCategoryId, { transaction });
       if (expenseCategory) {
         categoryName = expenseCategory.name;
       }
     }
 
     // Create expense record in Expense table
-    const expense = await Expense.create({
-      establishmentId: cashRegister.establishmentId,
-      cashRegisterId,
-      userId: req.user.id,
-      category: categoryName,
-      description: description || 'Gasto desde caja',
-      amount: expenseAmount,
-      paymentMethod,
-      notes,
-      expenseDate: new Date().toISOString().split('T')[0]
-    }, { transaction });
+    try {
+      await Expense.create({
+        establishmentId: cashRegister.establishmentId,
+        cashRegisterId,
+        userId: req.user.id,
+        category: categoryName,
+        description: description || 'Gasto desde caja',
+        amount: expenseAmount,
+        paymentMethod,
+        notes,
+        expenseDate: new Date().toISOString().split('T')[0]
+      }, { transaction });
+    } catch (expenseError) {
+      console.error('Error creating expense record:', expenseError);
+      // Continue even if expense creation fails - the movement is more important
+    }
 
     // Create movement (negative amount for expense)
     const movement = await CashRegisterMovement.create({
