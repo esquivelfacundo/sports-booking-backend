@@ -140,12 +140,25 @@ router.post('/expense', authenticateToken, async (req, res) => {
 
     const expenseAmount = parseFloat(amount);
 
+    console.log('Creating expense movement:', {
+      cashRegisterId,
+      amount: expenseAmount,
+      paymentMethod,
+      expenseCategoryId,
+      description,
+      userId: req.user.id
+    });
+
     // Get expense category name if provided
     let categoryName = 'Otros';
     if (expenseCategoryId) {
-      const expenseCategory = await ExpenseCategory.findByPk(expenseCategoryId, { transaction });
-      if (expenseCategory) {
-        categoryName = expenseCategory.name;
+      try {
+        const expenseCategory = await ExpenseCategory.findByPk(expenseCategoryId, { transaction });
+        if (expenseCategory) {
+          categoryName = expenseCategory.name;
+        }
+      } catch (catError) {
+        console.error('Error fetching expense category:', catError);
       }
     }
 
@@ -162,24 +175,35 @@ router.post('/expense', authenticateToken, async (req, res) => {
         notes,
         expenseDate: new Date().toISOString().split('T')[0]
       }, { transaction });
+      console.log('Expense record created successfully');
     } catch (expenseError) {
-      console.error('Error creating expense record:', expenseError);
+      console.error('Error creating expense record:', expenseError.message, expenseError.errors);
       // Continue even if expense creation fails - the movement is more important
     }
 
     // Create movement (negative amount for expense)
-    const movement = await CashRegisterMovement.create({
-      cashRegisterId,
-      establishmentId: cashRegister.establishmentId,
-      type: 'expense',
-      amount: -Math.abs(expenseAmount),
-      paymentMethod,
-      expenseCategoryId,
-      description,
-      notes,
-      registeredBy: req.user.id,
-      registeredAt: new Date()
-    }, { transaction });
+    let movement;
+    try {
+      movement = await CashRegisterMovement.create({
+        cashRegisterId,
+        establishmentId: cashRegister.establishmentId,
+        type: 'expense',
+        amount: -Math.abs(expenseAmount),
+        paymentMethod,
+        expenseCategoryId,
+        description,
+        notes,
+        registeredBy: req.user.id
+      }, { transaction });
+      console.log('Cash register movement created successfully');
+    } catch (movementError) {
+      console.error('Error creating cash register movement:', movementError.message, movementError.errors);
+      await transaction.rollback();
+      return res.status(500).json({ 
+        error: 'Failed to create expense movement',
+        details: movementError.message 
+      });
+    }
 
     // Update cash register totals
     const updates = {
