@@ -106,7 +106,7 @@ router.get('/export', authenticateToken, async (req, res) => {
     const csvData = products.map(product => {
       const productStatus = product.currentStock === 0 ? 'Sin Stock' :
         product.currentStock <= product.minStock ? 'Stock Bajo' : 'Normal';
-      const valorTotal = (product.currentStock || 0) * (product.cost || 0);
+      const valorTotal = (product.currentStock || 0) * (product.costPrice || 0);
       
       return {
         producto: product.name,
@@ -115,10 +115,10 @@ router.get('/export', authenticateToken, async (req, res) => {
         stockActual: product.currentStock || 0,
         stockMinimo: product.minStock || 0,
         stockMaximo: product.maxStock || '-',
-        costoUnitario: csvUtils.formatNumberForCSV(product.cost),
+        costoUnitario: csvUtils.formatNumberForCSV(product.costPrice),
         valorTotal: csvUtils.formatNumberForCSV(valorTotal),
         estado: productStatus,
-        precio: csvUtils.formatNumberForCSV(product.price)
+        precio: csvUtils.formatNumberForCSV(product.salePrice)
       };
     });
 

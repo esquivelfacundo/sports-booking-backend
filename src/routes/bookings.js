@@ -415,6 +415,10 @@ router.use(authenticateToken);
 // User booking routes
 router.get('/', queryValidation, handleValidationErrors, getBookings);
 router.post('/', createBookingValidation, handleValidationErrors, createBooking);
+
+// Export bookings to CSV - MUST be before /:id route
+router.get('/export', exportBookingsToCSV);
+
 router.get('/:id', getBookingById);
 router.put('/:id', updateBookingValidation, handleValidationErrors, updateBooking);
 router.delete('/:id', cancelBooking);
@@ -839,8 +843,5 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Error al obtener los pagos' });
   }
 });
-
-// Export bookings to CSV
-router.get('/export', authenticateToken, exportBookingsToCSV);
 
 module.exports = router;

@@ -246,6 +246,109 @@ router.get('/booking/:bookingId', authenticateToken, async (req, res) => {
   }
 });
 
+// Export orders to CSV - MUST be before /:id route
+router.get('/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate, orderType, paymentStatus, paymentMethod } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId };
+
+    if (startDate && endDate) {
+      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59')] };
+    } else if (startDate) {
+      where.createdAt = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      where.createdAt = { [Op.lte]: new Date(endDate + 'T23:59:59') };
+    }
+
+    if (orderType) {
+      where.orderType = orderType;
+    }
+
+    if (paymentStatus) {
+      where.paymentStatus = paymentStatus;
+    }
+
+    if (paymentMethod) {
+      where.paymentMethod = paymentMethod;
+    }
+
+    const orders = await Order.findAll({
+      where,
+      include: [
+        { model: OrderItem, as: 'items' },
+        { model: Client, as: 'client', attributes: ['name', 'phone'] },
+        { model: User, as: 'createdByUser', attributes: ['firstName', 'lastName'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(orders);
+
+    const csvData = orders.map(order => {
+      const items = order.items || [];
+      const productsList = items.map(i => `${i.productName} (x${i.quantity})`).join(', ');
+      
+      return {
+        fechaHora: csvUtils.formatDateTimeForCSV(order.createdAt),
+        numeroOrden: order.orderNumber,
+        tipo: order.orderType === 'direct_sale' ? 'Venta Directa' : 'Consumo Reserva',
+        cliente: order.customerName || order.client?.name || '-',
+        productos: productsList || '-',
+        subtotal: csvUtils.formatNumberForCSV(order.subtotal),
+        descuento: csvUtils.formatNumberForCSV(order.discount),
+        total: csvUtils.formatNumberForCSV(order.total),
+        pagado: csvUtils.formatNumberForCSV(order.paidAmount),
+        pendiente: csvUtils.formatNumberForCSV((order.total || 0) - (order.paidAmount || 0)),
+        metodoPago: order.paymentMethod || '-',
+        estadoPago: order.paymentStatus === 'paid' ? 'Pagado' : order.paymentStatus === 'partial' ? 'Parcial' : 'Pendiente',
+        usuario: order.createdByUser ? `${order.createdByUser.firstName} ${order.createdByUser.lastName}`.trim() : 'N/A',
+        notas: order.notes || ''
+      };
+    });
+
+    const fields = [
+      { label: 'Fecha/Hora', value: 'fechaHora' },
+      { label: 'Nº Orden', value: 'numeroOrden' },
+      { label: 'Tipo', value: 'tipo' },
+      { label: 'Cliente', value: 'cliente' },
+      { label: 'Productos', value: 'productos' },
+      { label: 'Subtotal', value: 'subtotal' },
+      { label: 'Descuento', value: 'descuento' },
+      { label: 'Total', value: 'total' },
+      { label: 'Pagado', value: 'pagado' },
+      { label: 'Pendiente', value: 'pendiente' },
+      { label: 'Método de Pago', value: 'metodoPago' },
+      { label: 'Estado de Pago', value: 'estadoPago' },
+      { label: 'Usuario', value: 'usuario' },
+      { label: 'Notas', value: 'notas' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `ventas_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting orders:', error);
+    res.status(500).json({ error: 'Failed to export orders', message: error.message });
+  }
+});
+
 // Get single order with full details
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -919,109 +1022,6 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching order stats:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
-  }
-});
-
-// Export orders to CSV
-router.get('/export', authenticateToken, async (req, res) => {
-  try {
-    const { establishmentId, startDate, endDate, orderType, paymentStatus, paymentMethod } = req.query;
-
-    if (!establishmentId) {
-      return res.status(400).json({ error: 'Establishment ID is required' });
-    }
-
-    const establishment = await Establishment.findByPk(establishmentId);
-    if (!establishment) {
-      return res.status(404).json({ error: 'Establishment not found' });
-    }
-
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const where = { establishmentId };
-
-    if (startDate && endDate) {
-      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59')] };
-    } else if (startDate) {
-      where.createdAt = { [Op.gte]: new Date(startDate) };
-    } else if (endDate) {
-      where.createdAt = { [Op.lte]: new Date(endDate + 'T23:59:59') };
-    }
-
-    if (orderType) {
-      where.orderType = orderType;
-    }
-
-    if (paymentStatus) {
-      where.paymentStatus = paymentStatus;
-    }
-
-    if (paymentMethod) {
-      where.paymentMethod = paymentMethod;
-    }
-
-    const orders = await Order.findAll({
-      where,
-      include: [
-        { model: OrderItem, as: 'items' },
-        { model: Client, as: 'client', attributes: ['name', 'phone'] },
-        { model: User, as: 'createdByUser', attributes: ['firstName', 'lastName'] }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    const csvUtils = require('../utils/csvGenerator');
-    csvUtils.validateDataSize(orders);
-
-    const csvData = orders.map(order => {
-      const items = order.items || [];
-      const productsList = items.map(i => `${i.productName} (x${i.quantity})`).join(', ');
-      
-      return {
-        fechaHora: csvUtils.formatDateTimeForCSV(order.createdAt),
-        numeroOrden: order.orderNumber,
-        tipo: order.orderType === 'direct_sale' ? 'Venta Directa' : 'Consumo Reserva',
-        cliente: order.customerName || order.client?.name || '-',
-        productos: productsList || '-',
-        subtotal: csvUtils.formatNumberForCSV(order.subtotal),
-        descuento: csvUtils.formatNumberForCSV(order.discount),
-        total: csvUtils.formatNumberForCSV(order.total),
-        pagado: csvUtils.formatNumberForCSV(order.paidAmount),
-        pendiente: csvUtils.formatNumberForCSV((order.total || 0) - (order.paidAmount || 0)),
-        metodoPago: order.paymentMethod || '-',
-        estadoPago: order.paymentStatus === 'paid' ? 'Pagado' : order.paymentStatus === 'partial' ? 'Parcial' : 'Pendiente',
-        usuario: order.createdByUser ? `${order.createdByUser.firstName} ${order.createdByUser.lastName}`.trim() : 'N/A',
-        notas: order.notes || ''
-      };
-    });
-
-    const fields = [
-      { label: 'Fecha/Hora', value: 'fechaHora' },
-      { label: 'Nº Orden', value: 'numeroOrden' },
-      { label: 'Tipo', value: 'tipo' },
-      { label: 'Cliente', value: 'cliente' },
-      { label: 'Productos', value: 'productos' },
-      { label: 'Subtotal', value: 'subtotal' },
-      { label: 'Descuento', value: 'descuento' },
-      { label: 'Total', value: 'total' },
-      { label: 'Pagado', value: 'pagado' },
-      { label: 'Pendiente', value: 'pendiente' },
-      { label: 'Método de Pago', value: 'metodoPago' },
-      { label: 'Estado de Pago', value: 'estadoPago' },
-      { label: 'Usuario', value: 'usuario' },
-      { label: 'Notas', value: 'notas' }
-    ];
-
-    const csv = csvUtils.generateCSV(csvData, fields);
-    const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `ventas_${establishment.slug || establishmentId}_${dateStr}.csv`;
-
-    csvUtils.sendCSVResponse(res, csv, filename);
-  } catch (error) {
-    console.error('Error exporting orders:', error);
-    res.status(500).json({ error: 'Failed to export orders', message: error.message });
   }
 });
 
