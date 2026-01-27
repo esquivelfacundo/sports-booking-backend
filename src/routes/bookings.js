@@ -12,7 +12,8 @@ const {
   updateBooking,
   cancelBooking,
   getEstablishmentBookings,
-  checkRecurringAvailability
+  checkRecurringAvailability,
+  exportBookingsToCSV
 } = require('../controllers/bookingController');
 
 const router = express.Router();
@@ -838,5 +839,8 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Error al obtener los pagos' });
   }
 });
+
+// Export bookings to CSV
+router.get('/export', authenticateToken, exportBookingsToCSV);
 
 module.exports = router;

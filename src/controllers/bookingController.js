@@ -1217,6 +1217,144 @@ const checkRecurringAvailability = async (req, res) => {
   }
 };
 
+const exportBookingsToCSV = async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate, courtId, status, clientName, paymentMethod } = req.query;
+    
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    // Verify access
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Build query filters
+    const where = { establishmentId };
+
+    if (startDate && endDate) {
+      where.date = {
+        [Op.between]: [startDate, endDate]
+      };
+    } else if (startDate) {
+      where.date = { [Op.gte]: startDate };
+    } else if (endDate) {
+      where.date = { [Op.lte]: endDate };
+    }
+
+    if (courtId) {
+      where.courtId = courtId;
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (clientName) {
+      where.clientName = { [Op.iLike]: `%${clientName}%` };
+    }
+
+    if (paymentMethod) {
+      where.paymentMethod = paymentMethod;
+    }
+
+    // Fetch bookings
+    const bookings = await Booking.findAll({
+      where,
+      include: [
+        {
+          model: Court,
+          as: 'court',
+          attributes: ['name']
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['firstName', 'lastName', 'email', 'phone']
+        },
+        {
+          model: Client,
+          as: 'client',
+          attributes: ['name', 'phone', 'email']
+        }
+      ],
+      order: [['date', 'DESC'], ['startTime', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    
+    // Validate data size
+    csvUtils.validateDataSize(bookings);
+
+    // Transform data for CSV
+    const csvData = bookings.map(booking => {
+      const client = booking.client || {};
+      const user = booking.user || {};
+      const court = booking.court || {};
+      
+      return {
+        fecha: csvUtils.formatDateForCSV(booking.date),
+        horaInicio: booking.startTime,
+        horaFin: booking.endTime,
+        cancha: court.name || 'N/A',
+        cliente: booking.clientName || client.name || `${user.firstName} ${user.lastName}`.trim(),
+        telefono: booking.clientPhone || client.phone || user.phone || '',
+        email: booking.clientEmail || client.email || user.email || '',
+        estado: booking.status,
+        tipoPago: booking.paymentType === 'full' ? 'Completo' : 'Seña',
+        montoTotal: csvUtils.formatCurrencyForCSV(booking.totalAmount),
+        seña: csvUtils.formatCurrencyForCSV(booking.depositAmount || booking.initialDeposit),
+        saldoPendiente: csvUtils.formatCurrencyForCSV(
+          (booking.totalAmount || 0) - (booking.paidAmount || 0)
+        ),
+        metodoPago: booking.paymentMethod || '',
+        notas: booking.notes || ''
+      };
+    });
+
+    // Define CSV fields
+    const fields = [
+      { label: 'Fecha', value: 'fecha' },
+      { label: 'Hora Inicio', value: 'horaInicio' },
+      { label: 'Hora Fin', value: 'horaFin' },
+      { label: 'Cancha', value: 'cancha' },
+      { label: 'Cliente', value: 'cliente' },
+      { label: 'Teléfono', value: 'telefono' },
+      { label: 'Email', value: 'email' },
+      { label: 'Estado', value: 'estado' },
+      { label: 'Tipo de Pago', value: 'tipoPago' },
+      { label: 'Monto Total', value: 'montoTotal' },
+      { label: 'Seña', value: 'seña' },
+      { label: 'Saldo Pendiente', value: 'saldoPendiente' },
+      { label: 'Método de Pago', value: 'metodoPago' },
+      { label: 'Notas', value: 'notas' }
+    ];
+
+    // Generate CSV
+    const csv = csvUtils.generateCSV(csvData, fields);
+    
+    // Generate filename
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `reservas_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    // Send response
+    csvUtils.sendCSVResponse(res, csv, filename);
+
+  } catch (error) {
+    console.error('Error exporting bookings to CSV:', error);
+    res.status(500).json({ 
+      error: 'Failed to export bookings',
+      message: error.message 
+    });
+  }
+};
+
 module.exports = {
   createBooking,
   getBookings,
@@ -1224,6 +1362,7 @@ module.exports = {
   updateBooking,
   cancelBooking,
   getEstablishmentBookings,
-  checkRecurringAvailability
+  checkRecurringAvailability,
+  exportBookingsToCSV
 };
 
