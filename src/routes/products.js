@@ -62,6 +62,90 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Export inventory to CSV - MUST be before /:id route
+router.get('/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, categoryId, stockStatus } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId, isActive: true };
+
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+
+    if (stockStatus === 'low') {
+      where.currentStock = { [Op.lte]: sequelize.col('minStock') };
+    } else if (stockStatus === 'critical') {
+      where.currentStock = { [Op.eq]: 0 };
+    }
+
+    const products = await Product.findAll({
+      where,
+      include: [
+        { model: ProductCategory, as: 'category', attributes: ['name'] }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(products);
+
+    const csvData = products.map(product => {
+      const productStatus = product.currentStock === 0 ? 'Sin Stock' :
+        product.currentStock <= product.minStock ? 'Stock Bajo' : 'Normal';
+      const valorTotal = (product.currentStock || 0) * (product.cost || 0);
+      
+      return {
+        producto: product.name,
+        categoria: product.category?.name || '-',
+        sku: product.sku || '-',
+        stockActual: product.currentStock || 0,
+        stockMinimo: product.minStock || 0,
+        stockMaximo: product.maxStock || '-',
+        costoUnitario: csvUtils.formatNumberForCSV(product.cost),
+        valorTotal: csvUtils.formatNumberForCSV(valorTotal),
+        estado: productStatus,
+        precio: csvUtils.formatNumberForCSV(product.price)
+      };
+    });
+
+    const fields = [
+      { label: 'Producto', value: 'producto' },
+      { label: 'Categoría', value: 'categoria' },
+      { label: 'SKU', value: 'sku' },
+      { label: 'Stock Actual', value: 'stockActual' },
+      { label: 'Stock Mínimo', value: 'stockMinimo' },
+      { label: 'Stock Máximo', value: 'stockMaximo' },
+      { label: 'Costo Unitario', value: 'costoUnitario' },
+      { label: 'Valor Total', value: 'valorTotal' },
+      { label: 'Estado', value: 'estado' },
+      { label: 'Precio Venta', value: 'precio' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `inventario_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting inventory:', error);
+    res.status(500).json({ error: 'Failed to export inventory', message: error.message });
+  }
+});
+
 // Get single product
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -315,90 +399,6 @@ router.get('/alerts/low-stock', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching low stock products:', error);
     res.status(500).json({ error: 'Failed to fetch low stock products' });
-  }
-});
-
-// Export inventory to CSV
-router.get('/export', authenticateToken, async (req, res) => {
-  try {
-    const { establishmentId, categoryId, stockStatus } = req.query;
-
-    if (!establishmentId) {
-      return res.status(400).json({ error: 'Establishment ID is required' });
-    }
-
-    const establishment = await Establishment.findByPk(establishmentId);
-    if (!establishment) {
-      return res.status(404).json({ error: 'Establishment not found' });
-    }
-
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const where = { establishmentId, isActive: true };
-
-    if (categoryId) {
-      where.categoryId = categoryId;
-    }
-
-    if (stockStatus === 'low') {
-      where.currentStock = { [Op.lte]: sequelize.col('minStock') };
-    } else if (stockStatus === 'critical') {
-      where.currentStock = { [Op.eq]: 0 };
-    }
-
-    const products = await Product.findAll({
-      where,
-      include: [
-        { model: ProductCategory, as: 'category', attributes: ['name'] }
-      ],
-      order: [['name', 'ASC']]
-    });
-
-    const csvUtils = require('../utils/csvGenerator');
-    csvUtils.validateDataSize(products);
-
-    const csvData = products.map(product => {
-      const productStatus = product.currentStock === 0 ? 'Sin Stock' :
-        product.currentStock <= product.minStock ? 'Stock Bajo' : 'Normal';
-      const valorTotal = (product.currentStock || 0) * (product.cost || 0);
-      
-      return {
-        producto: product.name,
-        categoria: product.category?.name || '-',
-        sku: product.sku || '-',
-        stockActual: product.currentStock || 0,
-        stockMinimo: product.minStock || 0,
-        stockMaximo: product.maxStock || '-',
-        costoUnitario: csvUtils.formatNumberForCSV(product.cost),
-        valorTotal: csvUtils.formatNumberForCSV(valorTotal),
-        estado: productStatus,
-        precio: csvUtils.formatNumberForCSV(product.price)
-      };
-    });
-
-    const fields = [
-      { label: 'Producto', value: 'producto' },
-      { label: 'Categoría', value: 'categoria' },
-      { label: 'SKU', value: 'sku' },
-      { label: 'Stock Actual', value: 'stockActual' },
-      { label: 'Stock Mínimo', value: 'stockMinimo' },
-      { label: 'Stock Máximo', value: 'stockMaximo' },
-      { label: 'Costo Unitario', value: 'costoUnitario' },
-      { label: 'Valor Total', value: 'valorTotal' },
-      { label: 'Estado', value: 'estado' },
-      { label: 'Precio Venta', value: 'precio' }
-    ];
-
-    const csv = csvUtils.generateCSV(csvData, fields);
-    const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `inventario_${establishment.slug || establishmentId}_${dateStr}.csv`;
-
-    csvUtils.sendCSVResponse(res, csv, filename);
-  } catch (error) {
-    console.error('Error exporting inventory:', error);
-    res.status(500).json({ error: 'Failed to export inventory', message: error.message });
   }
 });
 
