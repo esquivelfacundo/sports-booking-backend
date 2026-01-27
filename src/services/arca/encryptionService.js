@@ -20,13 +20,24 @@ const AUTH_TAG_LENGTH = 16;
  */
 function getEncryptionKey() {
   const keyHex = process.env.ARCA_ENCRYPTION_KEY;
+  const arcaEnvKeys = Object.keys(process.env || {}).filter((k) => k.startsWith('ARCA_'));
   
   if (!keyHex) {
-    throw new Error('ARCA_ENCRYPTION_KEY not configured in environment variables');
+    throw new Error(
+      `ARCA_ENCRYPTION_KEY not configured in environment variables. Present ARCA_* vars: ${arcaEnvKeys.join(', ') || '(none)'}`
+    );
   }
   
   if (keyHex.length !== 64) {
-    throw new Error('ARCA_ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
+    throw new Error(
+      `ARCA_ENCRYPTION_KEY must be 64 hex characters (32 bytes). Received length: ${keyHex.length}. Present ARCA_* vars: ${arcaEnvKeys.join(', ') || '(none)'}`
+    );
+  }
+
+  if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
+    throw new Error(
+      `ARCA_ENCRYPTION_KEY must be a 64-character hex string (0-9, a-f). Present ARCA_* vars: ${arcaEnvKeys.join(', ') || '(none)'}`
+    );
   }
   
   return Buffer.from(keyHex, 'hex');
