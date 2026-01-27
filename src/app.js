@@ -193,9 +193,48 @@ const startServer = async () => {
     } else {
       // In production, sync only new tables that might be missing
       const { CourtPriceSchedule, Expense } = require('./models');
+      
+      // Sync CourtPriceSchedule
       await CourtPriceSchedule.sync({ alter: true });
-      await Expense.sync({ alter: true });
-      console.log('✅ CourtPriceSchedule and Expense tables synchronized');
+      console.log('✅ CourtPriceSchedule table synchronized');
+      
+      // Force create Expense table if it doesn't exist
+      try {
+        await Expense.sync();
+        console.log('✅ Expense table synchronized');
+      } catch (expenseError) {
+        console.error('Error syncing Expense table:', expenseError.message);
+        // Try with force if sync fails
+        try {
+          await sequelize.query(`
+            CREATE TABLE IF NOT EXISTS expenses (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              "establishmentId" UUID NOT NULL REFERENCES establishments(id) ON DELETE CASCADE,
+              "cashRegisterId" UUID REFERENCES cash_registers(id) ON DELETE SET NULL,
+              "userId" UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+              category VARCHAR(100) NOT NULL,
+              description VARCHAR(500) NOT NULL,
+              amount DECIMAL(10, 2) NOT NULL,
+              "paymentMethod" VARCHAR(50),
+              "invoiceNumber" VARCHAR(100),
+              supplier VARCHAR(200),
+              notes TEXT,
+              "expenseDate" DATE NOT NULL DEFAULT CURRENT_DATE,
+              "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_expenses_establishment ON expenses("establishmentId");
+            CREATE INDEX IF NOT EXISTS idx_expenses_cash_register ON expenses("cashRegisterId");
+            CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses("userId");
+            CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses("expenseDate");
+            CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
+          `);
+          console.log('✅ Expense table created via raw SQL');
+        } catch (rawError) {
+          console.error('Failed to create Expense table:', rawError.message);
+        }
+      }
     }
     
     const PORT = process.env.PORT || 3001;
