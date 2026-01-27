@@ -478,4 +478,103 @@ router.get('/export', authenticateToken, async (req, res) => {
   }
 });
 
+// Export daily cash closing summary to CSV
+router.get('/daily-closing/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, date, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      status: 'closed'
+    };
+
+    if (date) {
+      const targetDate = new Date(date);
+      const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+      where.closedAt = { [Op.between]: [startOfDay, endOfDay] };
+    } else if (startDate || endDate) {
+      where.closedAt = {};
+      if (startDate) where.closedAt[Op.gte] = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.closedAt[Op.lte] = end;
+      }
+    }
+
+    const cashRegisters = await CashRegister.findAll({
+      where,
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName'] }
+      ],
+      order: [['closedAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const csvData = cashRegisters.map(cr => {
+      const expectedCash = parseFloat(cr.initialAmount || 0) + parseFloat(cr.totalCashSales || 0) - parseFloat(cr.totalCashExpenses || 0);
+      const actualCash = parseFloat(cr.actualCash || 0);
+      const difference = actualCash - expectedCash;
+
+      return {
+        fechaCierre: csvUtils.formatDateTimeForCSV(cr.closedAt),
+        usuario: cr.user ? `${cr.user.firstName || ''} ${cr.user.lastName || ''}`.trim() : '-',
+        montoInicial: csvUtils.formatNumberForCSV(cr.initialAmount || 0),
+        ventasEfectivo: csvUtils.formatNumberForCSV(cr.totalCashSales || 0),
+        ventasTarjeta: csvUtils.formatNumberForCSV(cr.totalCardSales || 0),
+        ventasTransferencia: csvUtils.formatNumberForCSV(cr.totalTransferSales || 0),
+        ventasMP: csvUtils.formatNumberForCSV(cr.totalMPSales || 0),
+        totalVentas: csvUtils.formatNumberForCSV(cr.totalSales || 0),
+        totalGastos: csvUtils.formatNumberForCSV(cr.totalExpenses || 0),
+        efectivoEsperado: csvUtils.formatNumberForCSV(expectedCash),
+        efectivoReal: csvUtils.formatNumberForCSV(actualCash),
+        diferencia: csvUtils.formatNumberForCSV(difference),
+        estadoDiferencia: difference === 0 ? 'OK' : difference > 0 ? 'Sobrante' : 'Faltante',
+        observaciones: cr.closingNotes || '-'
+      };
+    });
+
+    const fields = [
+      { label: 'Fecha Cierre', value: 'fechaCierre' },
+      { label: 'Usuario', value: 'usuario' },
+      { label: 'Monto Inicial', value: 'montoInicial' },
+      { label: 'Ventas Efectivo', value: 'ventasEfectivo' },
+      { label: 'Ventas Tarjeta', value: 'ventasTarjeta' },
+      { label: 'Ventas Transferencia', value: 'ventasTransferencia' },
+      { label: 'Ventas MP', value: 'ventasMP' },
+      { label: 'Total Ventas', value: 'totalVentas' },
+      { label: 'Total Gastos', value: 'totalGastos' },
+      { label: 'Efectivo Esperado', value: 'efectivoEsperado' },
+      { label: 'Efectivo Real', value: 'efectivoReal' },
+      { label: 'Diferencia', value: 'diferencia' },
+      { label: 'Estado', value: 'estadoDiferencia' },
+      { label: 'Observaciones', value: 'observaciones' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `cierre_caja_diario_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting daily cash closing:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

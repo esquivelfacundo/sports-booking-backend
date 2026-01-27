@@ -1114,4 +1114,117 @@ router.get('/sales-by-product/export', authenticateToken, async (req, res) => {
   }
 });
 
+// Export sales by payment method to CSV
+router.get('/by-payment-method/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      status: { [Op.in]: ['completed', 'paid'] }
+    };
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt[Op.lte] = end;
+      }
+    }
+
+    // Get all orders with their payments
+    const orders = await Order.findAll({
+      where,
+      include: [
+        { model: OrderPayment, as: 'payments' }
+      ],
+      attributes: ['id', 'total', 'paymentMethod', 'createdAt']
+    });
+
+    // Aggregate by payment method
+    const byPaymentMethod = {};
+    orders.forEach(order => {
+      if (order.payments && order.payments.length > 0) {
+        // Use payments if available
+        order.payments.forEach(payment => {
+          const method = payment.method || 'Efectivo';
+          if (!byPaymentMethod[method]) {
+            byPaymentMethod[method] = { count: 0, total: 0 };
+          }
+          byPaymentMethod[method].count += 1;
+          byPaymentMethod[method].total += parseFloat(payment.amount || 0);
+        });
+      } else {
+        // Use order payment method
+        const method = order.paymentMethod || 'Efectivo';
+        if (!byPaymentMethod[method]) {
+          byPaymentMethod[method] = { count: 0, total: 0 };
+        }
+        byPaymentMethod[method].count += 1;
+        byPaymentMethod[method].total += parseFloat(order.total || 0);
+      }
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const totalSales = Object.values(byPaymentMethod).reduce((sum, m) => sum + m.total, 0);
+    const totalCount = Object.values(byPaymentMethod).reduce((sum, m) => sum + m.count, 0);
+
+    const sortedMethods = Object.entries(byPaymentMethod)
+      .sort((a, b) => b[1].total - a[1].total);
+
+    const methodLabels = {
+      'cash': 'Efectivo',
+      'card': 'Tarjeta',
+      'transfer': 'Transferencia',
+      'mercadopago': 'MercadoPago',
+      'mp': 'MercadoPago'
+    };
+
+    const csvData = sortedMethods.map(([method, data], index) => ({
+      ranking: index + 1,
+      metodoPago: methodLabels[method.toLowerCase()] || method,
+      cantidadVentas: data.count,
+      montoTotal: csvUtils.formatNumberForCSV(data.total),
+      porcentajeMonto: totalSales > 0 ? ((data.total / totalSales) * 100).toFixed(2) + '%' : '0%',
+      porcentajeCantidad: totalCount > 0 ? ((data.count / totalCount) * 100).toFixed(2) + '%' : '0%',
+      ticketPromedio: csvUtils.formatNumberForCSV(data.count > 0 ? data.total / data.count : 0)
+    }));
+
+    const fields = [
+      { label: 'Ranking', value: 'ranking' },
+      { label: 'Método de Pago', value: 'metodoPago' },
+      { label: 'Cantidad Ventas', value: 'cantidadVentas' },
+      { label: 'Monto Total', value: 'montoTotal' },
+      { label: '% del Monto', value: 'porcentajeMonto' },
+      { label: '% Cantidad', value: 'porcentajeCantidad' },
+      { label: 'Ticket Promedio', value: 'ticketPromedio' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `ventas_por_metodo_pago_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting sales by payment method:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

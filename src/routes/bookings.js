@@ -844,4 +844,79 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
   }
 });
 
+// Export no-show bookings to CSV
+router.get('/no-show/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, courtId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      status: 'no_show'
+    };
+
+    if (courtId) where.courtId = courtId;
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) where.date[Op.gte] = startDate;
+      if (endDate) where.date[Op.lte] = endDate;
+    }
+
+    const bookings = await Booking.findAll({
+      where,
+      include: [
+        { model: Court, as: 'court', attributes: ['id', 'name'] }
+      ],
+      order: [['date', 'DESC'], ['startTime', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const csvData = bookings.map(booking => ({
+      fecha: csvUtils.formatDateForCSV(booking.date),
+      hora: booking.startTime?.slice(0, 5) || '-',
+      cancha: booking.court?.name || '-',
+      cliente: booking.clientName || '-',
+      telefono: booking.clientPhone || '-',
+      email: booking.clientEmail || '-',
+      montoPerdido: csvUtils.formatNumberForCSV(booking.totalAmount || 0),
+      senaPerdida: csvUtils.formatNumberForCSV(booking.depositAmount || 0),
+      motivo: booking.cancellationReason || booking.notes || '-'
+    }));
+
+    const fields = [
+      { label: 'Fecha', value: 'fecha' },
+      { label: 'Hora', value: 'hora' },
+      { label: 'Cancha', value: 'cancha' },
+      { label: 'Cliente', value: 'cliente' },
+      { label: 'Teléfono', value: 'telefono' },
+      { label: 'Email', value: 'email' },
+      { label: 'Monto Perdido', value: 'montoPerdido' },
+      { label: 'Seña Perdida', value: 'senaPerdida' },
+      { label: 'Motivo', value: 'motivo' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `reservas_no_show_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting no-show bookings:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

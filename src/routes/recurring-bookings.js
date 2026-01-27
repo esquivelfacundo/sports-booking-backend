@@ -812,4 +812,94 @@ router.get('/:groupId/pending-bookings', authenticateToken, async (req, res) => 
   }
 });
 
+// Export recurring bookings to CSV
+router.get('/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, status, clientId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId };
+    if (status) where.status = status;
+    if (clientId) where.clientId = clientId;
+    if (startDate) where.startDate = { [Op.gte]: startDate };
+    if (endDate) where.endDate = { ...where.endDate, [Op.lte]: endDate };
+
+    const groups = await RecurringBookingGroup.findAll({
+      where,
+      include: [
+        { model: Court, as: 'primaryCourt', attributes: ['id', 'name', 'sport'] },
+        { model: Client, as: 'client', attributes: ['id', 'name', 'phone', 'email'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+    const csvDataPromises = groups.map(async (group) => {
+      const bookings = await Booking.findAll({
+        where: { recurringGroupId: group.id },
+        attributes: ['id', 'status']
+      });
+
+      const totalBookings = bookings.length;
+      const completedBookings = bookings.filter(b => b.status === 'completed').length;
+
+      return {
+        grupo: group.groupName || `Grupo #${group.id.slice(0, 8)}`,
+        frecuencia: group.frequency === 'weekly' ? 'Semanal' : group.frequency,
+        diaSemana: dayNames[group.dayOfWeek] || group.dayOfWeek,
+        hora: group.startTime?.slice(0, 5) || '-',
+        cancha: group.primaryCourt?.name || '-',
+        cliente: group.client?.name || group.clientName || '-',
+        telefono: group.client?.phone || group.clientPhone || '-',
+        fechaInicio: csvUtils.formatDateForCSV(group.startDate),
+        fechaFin: group.endDate ? csvUtils.formatDateForCSV(group.endDate) : 'Indefinido',
+        totalReservas: totalBookings,
+        reservasCompletadas: completedBookings,
+        estado: group.status === 'active' ? 'Activo' : group.status === 'paused' ? 'Pausado' : 'Finalizado'
+      };
+    });
+
+    const csvData = await Promise.all(csvDataPromises);
+
+    const fields = [
+      { label: 'Grupo', value: 'grupo' },
+      { label: 'Frecuencia', value: 'frecuencia' },
+      { label: 'Día de Semana', value: 'diaSemana' },
+      { label: 'Hora', value: 'hora' },
+      { label: 'Cancha', value: 'cancha' },
+      { label: 'Cliente', value: 'cliente' },
+      { label: 'Teléfono', value: 'telefono' },
+      { label: 'Fecha Inicio', value: 'fechaInicio' },
+      { label: 'Fecha Fin', value: 'fechaFin' },
+      { label: 'Total Reservas', value: 'totalReservas' },
+      { label: 'Reservas Completadas', value: 'reservasCompletadas' },
+      { label: 'Estado', value: 'estado' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `reservas_recurrentes_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting recurring bookings:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;
