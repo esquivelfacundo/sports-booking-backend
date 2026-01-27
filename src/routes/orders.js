@@ -507,16 +507,31 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Get invoice if exists
+    // Get invoice if exists (use snake_case since orderRaw comes from raw: true query)
     let invoice = null;
-    if (orderRaw.invoiceId) {
-      invoice = await Invoice.findByPk(orderRaw.invoiceId, {
+    const invoiceId = orderRaw.invoiceId || orderRaw.invoice_id;
+    if (invoiceId) {
+      const invoiceRaw = await Invoice.findByPk(invoiceId, {
         attributes: [
           'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
           'numeroComprobante', 'cae', 'caeVencimiento', 'total', 'fechaEmision'
         ],
         raw: true
       });
+      // Map snake_case to camelCase for frontend
+      if (invoiceRaw) {
+        invoice = {
+          id: invoiceRaw.id,
+          tipoComprobante: invoiceRaw.tipoComprobante || invoiceRaw.tipo_comprobante,
+          tipoComprobanteNombre: invoiceRaw.tipoComprobanteNombre || invoiceRaw.tipo_comprobante_nombre,
+          puntoVenta: invoiceRaw.puntoVenta || invoiceRaw.punto_venta,
+          numeroComprobante: invoiceRaw.numeroComprobante || invoiceRaw.numero_comprobante,
+          cae: invoiceRaw.cae,
+          caeVencimiento: invoiceRaw.caeVencimiento || invoiceRaw.cae_vencimiento,
+          total: invoiceRaw.total,
+          fechaEmision: invoiceRaw.fechaEmision || invoiceRaw.fecha_emision
+        };
+      }
     }
 
     const order = {
