@@ -43,6 +43,9 @@ const CouponUsage = require('./CouponUsage')(sequelize, DataTypes);
 const RecurringBookingGroup = require('./RecurringBookingGroup')(sequelize, DataTypes);
 const CourtPriceSchedule = require('./CourtPriceSchedule')(sequelize, DataTypes);
 const Expense = require('./Expense')(sequelize, DataTypes);
+const EstablishmentAfipConfig = require('./EstablishmentAfipConfig')(sequelize, DataTypes);
+const EstablishmentAfipPuntoVenta = require('./EstablishmentAfipPuntoVenta')(sequelize, DataTypes);
+const Invoice = require('./Invoice')(sequelize, DataTypes);
 
 // Define associations
 const defineAssociations = () => {
@@ -301,6 +304,34 @@ const defineAssociations = () => {
   Establishment.hasMany(Expense, { foreignKey: 'establishmentId', as: 'expenses' });
   User.hasMany(Expense, { foreignKey: 'userId', as: 'expenses' });
   CashRegister.hasMany(Expense, { foreignKey: 'cashRegisterId', as: 'expenses' });
+
+  // EstablishmentAfipConfig associations
+  EstablishmentAfipConfig.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  EstablishmentAfipConfig.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
+  EstablishmentAfipConfig.belongsTo(User, { foreignKey: 'updatedById', as: 'updatedBy' });
+  EstablishmentAfipConfig.hasMany(EstablishmentAfipPuntoVenta, { foreignKey: 'afipConfigId', as: 'puntosVenta' });
+  EstablishmentAfipConfig.hasMany(Invoice, { foreignKey: 'afipConfigId', as: 'invoices' });
+  Establishment.hasOne(EstablishmentAfipConfig, { foreignKey: 'establishmentId', as: 'afipConfig' });
+
+  // EstablishmentAfipPuntoVenta associations
+  EstablishmentAfipPuntoVenta.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  EstablishmentAfipPuntoVenta.belongsTo(EstablishmentAfipConfig, { foreignKey: 'afipConfigId', as: 'afipConfig' });
+  EstablishmentAfipPuntoVenta.hasMany(Invoice, { foreignKey: 'puntoVentaId', as: 'invoices' });
+  Establishment.hasMany(EstablishmentAfipPuntoVenta, { foreignKey: 'establishmentId', as: 'afipPuntosVenta' });
+
+  // Invoice associations
+  Invoice.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
+  Invoice.belongsTo(EstablishmentAfipConfig, { foreignKey: 'afipConfigId', as: 'afipConfig' });
+  Invoice.belongsTo(EstablishmentAfipPuntoVenta, { foreignKey: 'puntoVentaId', as: 'puntoVentaRef' });
+  Invoice.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  Invoice.belongsTo(Booking, { foreignKey: 'bookingId', as: 'booking' });
+  Invoice.belongsTo(Invoice, { foreignKey: 'comprobanteAsociadoId', as: 'comprobanteAsociado' });
+  Invoice.hasOne(Invoice, { foreignKey: 'comprobanteAsociadoId', as: 'notaCredito' });
+  Invoice.belongsTo(Invoice, { foreignKey: 'anuladoPorId', as: 'anuladoPor' });
+  Invoice.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' });
+  Establishment.hasMany(Invoice, { foreignKey: 'establishmentId', as: 'invoices' });
+  Order.hasOne(Invoice, { foreignKey: 'orderId', as: 'invoice' });
+  Booking.hasOne(Invoice, { foreignKey: 'bookingId', as: 'invoice' });
 };
 
 // Initialize associations
@@ -348,5 +379,8 @@ module.exports = {
   CouponUsage,
   RecurringBookingGroup,
   CourtPriceSchedule,
-  Expense
+  Expense,
+  EstablishmentAfipConfig,
+  EstablishmentAfipPuntoVenta,
+  Invoice
 };

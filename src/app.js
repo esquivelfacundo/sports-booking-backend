@@ -123,6 +123,7 @@ app.use('/api/v1', require('./routes/api-v1'));
 app.use('/api/whatsapp', require('./routes/whatsapp'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/recurring-bookings', require('./routes/recurring-bookings'));
+app.use('/api/arca', require('./routes/arca'));
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

@@ -217,6 +217,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true,
       comment: 'When the review was submitted for this booking'
+    },
+    invoiceId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'invoices',
+        key: 'id'
+      },
+      comment: 'Reference to AFIP invoice if invoiced'
     }
   }, {
     tableName: 'bookings',

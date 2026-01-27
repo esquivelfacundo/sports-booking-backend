@@ -93,6 +93,16 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.UUID,
       allowNull: false,
       field: 'createdBy'
+    },
+    invoiceId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      field: 'invoice_id',
+      references: {
+        model: 'invoices',
+        key: 'id'
+      },
+      comment: 'Reference to AFIP invoice if invoiced'
     }
   }, {
     tableName: 'orders',
