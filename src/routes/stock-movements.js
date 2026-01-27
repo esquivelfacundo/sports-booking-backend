@@ -338,7 +338,7 @@ router.get('/export', authenticateToken, async (req, res) => {
       where,
       include: [
         { model: Product, as: 'product', attributes: ['name', 'sku', 'unit'] },
-        { model: User, as: 'createdByUser', attributes: ['firstName', 'lastName'] }
+        { model: User, as: 'user', attributes: ['firstName', 'lastName'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -365,7 +365,7 @@ router.get('/export', authenticateToken, async (req, res) => {
       costoTotal: csvUtils.formatNumberForCSV(mov.totalCost),
       stockAnterior: mov.previousStock || 0,
       stockNuevo: mov.newStock || 0,
-      usuario: mov.createdByUser ? `${mov.createdByUser.firstName} ${mov.createdByUser.lastName}`.trim() : '-',
+      usuario: mov.user ? `${mov.user.firstName} ${mov.user.lastName}`.trim() : '-',
       notas: mov.notes || ''
     }));
 
@@ -432,7 +432,7 @@ router.get('/purchases/export', authenticateToken, async (req, res) => {
       where,
       include: [
         { model: Product, as: 'product', attributes: ['name', 'sku', 'unit'] },
-        { model: User, as: 'createdByUser', attributes: ['firstName', 'lastName'] }
+        { model: User, as: 'user', attributes: ['firstName', 'lastName'] }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -450,7 +450,7 @@ router.get('/purchases/export', authenticateToken, async (req, res) => {
       costoTotal: csvUtils.formatNumberForCSV(mov.totalCost),
       proveedor: mov.supplierName || '-',
       factura: mov.invoiceNumber || '-',
-      usuario: mov.createdByUser ? `${mov.createdByUser.firstName} ${mov.createdByUser.lastName}`.trim() : '-',
+      usuario: mov.user ? `${mov.user.firstName} ${mov.user.lastName}`.trim() : '-',
       notas: mov.notes || ''
     }));
 
