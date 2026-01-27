@@ -6,7 +6,8 @@ const {
   createExpense,
   updateExpense,
   deleteExpense,
-  getExpenseCategories
+  getExpenseCategories,
+  exportExpenses
 } = require('../controllers/expenseController');
 
 // All routes require authentication
@@ -14,6 +15,9 @@ router.use(authenticateToken);
 
 // Get expense categories
 router.get('/categories', getExpenseCategories);
+
+// Export expenses to CSV
+router.get('/establishment/:establishmentId/export', exportExpenses);
 
 // Get expenses for an establishment
 router.get('/establishment/:establishmentId', getExpenses);

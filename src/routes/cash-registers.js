@@ -380,4 +380,102 @@ router.post('/:id/close', authenticateToken, async (req, res) => {
   }
 });
 
+// Export cash registers to CSV
+router.get('/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate, userId, status } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId };
+
+    if (startDate && endDate) {
+      where.openedAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59')] };
+    } else if (startDate) {
+      where.openedAt = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      where.openedAt = { [Op.lte]: new Date(endDate + 'T23:59:59') };
+    }
+
+    if (userId) {
+      where.userId = userId;
+    }
+
+    if (status === 'open') {
+      where.closedAt = null;
+    } else if (status === 'closed') {
+      where.closedAt = { [Op.ne]: null };
+    }
+
+    const cashRegisters = await CashRegister.findAll({
+      where,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['firstName', 'lastName', 'email']
+        }
+      ],
+      order: [['openedAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(cashRegisters);
+
+    const csvData = cashRegisters.map(cr => ({
+      fechaApertura: csvUtils.formatDateTimeForCSV(cr.openedAt),
+      fechaCierre: cr.closedAt ? csvUtils.formatDateTimeForCSV(cr.closedAt) : 'Abierta',
+      usuario: cr.user ? `${cr.user.firstName} ${cr.user.lastName}`.trim() : 'N/A',
+      montoInicial: csvUtils.formatNumberForCSV(cr.initialAmount),
+      efectivoEsperado: csvUtils.formatNumberForCSV(cr.expectedCash),
+      efectivoReal: cr.actualCash ? csvUtils.formatNumberForCSV(cr.actualCash) : '-',
+      tarjeta: csvUtils.formatNumberForCSV(cr.totalCard),
+      transferencia: csvUtils.formatNumberForCSV(cr.totalTransfer),
+      mercadoPago: csvUtils.formatNumberForCSV(cr.totalMercadoPago),
+      totalVentas: csvUtils.formatNumberForCSV(cr.totalSales),
+      totalGastos: csvUtils.formatNumberForCSV(cr.totalExpenses),
+      diferencia: cr.cashDifference ? csvUtils.formatNumberForCSV(cr.cashDifference) : '-',
+      estado: cr.closedAt ? 'Cerrada' : 'Abierta',
+      observaciones: cr.closingNotes || ''
+    }));
+
+    const fields = [
+      { label: 'Fecha Apertura', value: 'fechaApertura' },
+      { label: 'Fecha Cierre', value: 'fechaCierre' },
+      { label: 'Usuario', value: 'usuario' },
+      { label: 'Monto Inicial', value: 'montoInicial' },
+      { label: 'Efectivo Esperado', value: 'efectivoEsperado' },
+      { label: 'Efectivo Real', value: 'efectivoReal' },
+      { label: 'Tarjeta', value: 'tarjeta' },
+      { label: 'Transferencia', value: 'transferencia' },
+      { label: 'MercadoPago', value: 'mercadoPago' },
+      { label: 'Total Ventas', value: 'totalVentas' },
+      { label: 'Total Gastos', value: 'totalGastos' },
+      { label: 'Diferencia', value: 'diferencia' },
+      { label: 'Estado', value: 'estado' },
+      { label: 'Observaciones', value: 'observaciones' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `turnos_caja_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting cash registers:', error);
+    res.status(500).json({ error: 'Failed to export cash registers', message: error.message });
+  }
+});
+
 module.exports = router;

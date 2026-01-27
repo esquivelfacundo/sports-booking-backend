@@ -352,10 +352,103 @@ const getExpenseCategories = async (req, res) => {
   }
 };
 
+/**
+ * Export expenses to CSV
+ */
+const exportExpenses = async (req, res) => {
+  try {
+    const { establishmentId } = req.params;
+    const { startDate, endDate, category, userId, origin } = req.query;
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId };
+
+    if (startDate && endDate) {
+      where.expenseDate = { [Op.between]: [startDate, endDate] };
+    } else if (startDate) {
+      where.expenseDate = { [Op.gte]: startDate };
+    } else if (endDate) {
+      where.expenseDate = { [Op.lte]: endDate };
+    }
+
+    if (category) {
+      where.category = category;
+    }
+
+    if (userId) {
+      where.userId = userId;
+    }
+
+    if (origin === 'cash_register') {
+      where.cashRegisterId = { [Op.ne]: null };
+    } else if (origin === 'administration') {
+      where.cashRegisterId = null;
+    }
+
+    const expenses = await Expense.findAll({
+      where,
+      include: [
+        { model: User, as: 'user', attributes: ['firstName', 'lastName'] },
+        { model: CashRegister, as: 'cashRegister', attributes: ['openedAt'] }
+      ],
+      order: [['expenseDate', 'DESC'], ['createdAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(expenses);
+
+    const csvData = expenses.map(expense => ({
+      fecha: csvUtils.formatDateForCSV(expense.expenseDate),
+      origen: expense.cashRegisterId ? 'Caja' : 'Administración',
+      fechaCaja: expense.cashRegister ? csvUtils.formatDateTimeForCSV(expense.cashRegister.openedAt) : '-',
+      categoria: expense.category,
+      descripcion: expense.description,
+      proveedor: expense.supplier || '-',
+      monto: csvUtils.formatNumberForCSV(expense.amount),
+      metodoPago: expense.paymentMethod || '-',
+      factura: expense.invoiceNumber || '-',
+      usuario: expense.user ? `${expense.user.firstName} ${expense.user.lastName}`.trim() : 'N/A',
+      notas: expense.notes || ''
+    }));
+
+    const fields = [
+      { label: 'Fecha', value: 'fecha' },
+      { label: 'Origen', value: 'origen' },
+      { label: 'Fecha Caja', value: 'fechaCaja' },
+      { label: 'Categoría', value: 'categoria' },
+      { label: 'Descripción', value: 'descripcion' },
+      { label: 'Proveedor', value: 'proveedor' },
+      { label: 'Monto', value: 'monto' },
+      { label: 'Método de Pago', value: 'metodoPago' },
+      { label: 'Factura', value: 'factura' },
+      { label: 'Usuario', value: 'usuario' },
+      { label: 'Notas', value: 'notas' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `gastos_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Export expenses error:', error);
+    res.status(500).json({ error: 'Failed to export expenses', message: error.message });
+  }
+};
+
 module.exports = {
   getExpenses,
   createExpense,
   updateExpense,
   deleteExpense,
-  getExpenseCategories
+  getExpenseCategories,
+  exportExpenses
 };
