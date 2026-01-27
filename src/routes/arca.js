@@ -73,7 +73,10 @@ router.get('/config/:establishmentId', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('[ARCA] Error getting config:', error);
-    res.status(500).json({ error: 'Error al obtener la configuración AFIP' });
+    res.status(500).json({
+      error: 'Error al obtener la configuración AFIP',
+      details: error.message
+    });
   }
 });
 
