@@ -3,6 +3,7 @@ const router = express.Router();
 const { Product, ProductCategory, StockMovement, Establishment } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
 
 // Get all products for an establishment
 router.get('/', authenticateToken, async (req, res) => {
@@ -342,7 +343,7 @@ router.get('/export', authenticateToken, async (req, res) => {
     }
 
     if (stockStatus === 'low') {
-      where.currentStock = { [Op.lte]: Product.sequelize.col('minStock') };
+      where.currentStock = { [Op.lte]: sequelize.col('minStock') };
     } else if (stockStatus === 'critical') {
       where.currentStock = { [Op.eq]: 0 };
     }
