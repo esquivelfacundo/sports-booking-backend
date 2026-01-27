@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Order, OrderItem, OrderPayment, Product, Establishment, Booking, Client, User, StockMovement, BookingConsumption, CurrentAccount, CurrentAccountMovement } = require('../models');
+const { Order, OrderItem, OrderPayment, Product, Establishment, Booking, Client, User, StockMovement, BookingConsumption, CurrentAccount, CurrentAccountMovement, Invoice } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
@@ -507,6 +507,18 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    // Get invoice if exists
+    let invoice = null;
+    if (orderRaw.invoiceId) {
+      invoice = await Invoice.findByPk(orderRaw.invoiceId, {
+        attributes: [
+          'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
+          'numeroComprobante', 'cae', 'caeVencimiento', 'total', 'fechaEmision'
+        ],
+        raw: true
+      });
+    }
+
     const order = {
       ...orderRaw,
       establishment: { id: establishment.id, name: establishment.name, slug: establishment.slug },
@@ -517,6 +529,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       createdByUser,
       items: itemsWithProducts,
       payments,
+      invoice,
       status: calculatedStatus,
       paymentStatus: calculatedPaymentStatus,
       total: calculatedTotal
