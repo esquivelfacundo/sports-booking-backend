@@ -44,7 +44,7 @@ router.get('/config/:establishmentId', authenticateToken, async (req, res) => {
       attributes: [
         'id', 'cuit', 'razonSocial', 'domicilioFiscal', 'condicionFiscal',
         'inicioActividades', 'certExpiration', 'isActive', 'isVerified',
-        'lastTestedAt', 'lastTestResult', 'createdAt', 'updatedAt'
+        'lastTestedAt', 'lastTestResult', 'encryptedCert', 'encryptedKey'
       ],
       include: [{
         model: EstablishmentAfipPuntoVenta,
@@ -62,12 +62,18 @@ router.get('/config/:establishmentId', authenticateToken, async (req, res) => {
       });
     }
 
+    const configJson = config.toJSON();
+    const hasCertificate = !!configJson.encryptedCert;
+    const hasPrivateKey = !!configJson.encryptedKey;
+    delete configJson.encryptedCert;
+    delete configJson.encryptedKey;
+
     res.json({
       configured: true,
       config: {
-        ...config.toJSON(),
-        hasCertificate: !!config.encryptedCert,
-        hasPrivateKey: !!config.encryptedKey
+        ...configJson,
+        hasCertificate,
+        hasPrivateKey
       }
     });
 

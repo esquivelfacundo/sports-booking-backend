@@ -110,7 +110,7 @@ class WSAAService {
     const expirationTime = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes ahead
 
     const formatDate = (date) => {
-      return date.toISOString().replace(/\.\d{3}Z$/, '-03:00');
+      return date.toISOString();
     };
 
     return `<?xml version="1.0" encoding="UTF-8"?>
