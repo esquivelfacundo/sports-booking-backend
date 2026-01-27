@@ -514,7 +514,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       const invoiceRaw = await Invoice.findByPk(invoiceId, {
         attributes: [
           'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
-          'numeroComprobante', 'cae', 'caeVencimiento', 'total', 'fechaEmision'
+          'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision'
         ],
         raw: true
       });
@@ -528,7 +528,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
           numeroComprobante: invoiceRaw.numeroComprobante || invoiceRaw.numero_comprobante,
           cae: invoiceRaw.cae,
           caeVencimiento: invoiceRaw.caeVencimiento || invoiceRaw.cae_vencimiento,
-          total: invoiceRaw.total,
           fechaEmision: invoiceRaw.fechaEmision || invoiceRaw.fecha_emision
         };
       }
