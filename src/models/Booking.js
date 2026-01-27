@@ -221,6 +221,7 @@ module.exports = (sequelize, DataTypes) => {
     invoiceId: {
       type: DataTypes.UUID,
       allowNull: true,
+      field: 'invoice_id',
       references: {
         model: 'invoices',
         key: 'id'
