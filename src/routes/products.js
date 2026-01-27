@@ -402,4 +402,82 @@ router.get('/alerts/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
+// Export low stock products to CSV
+router.get('/alerts/low-stock/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'establishmentId is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const products = await Product.findAll({
+      where: {
+        establishmentId,
+        isActive: true,
+        trackStock: true,
+        currentStock: {
+          [Op.lte]: sequelize.col('minStock')
+        }
+      },
+      include: [
+        { model: ProductCategory, as: 'category' }
+      ],
+      order: [['currentStock', 'ASC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const csvData = products.map(product => {
+      const diferencia = product.minStock - product.currentStock;
+      let estado = 'Normal';
+      if (product.currentStock === 0) estado = 'Sin Stock';
+      else if (product.currentStock <= product.minStock * 0.5) estado = 'Crítico';
+      else estado = 'Bajo';
+
+      return {
+        producto: product.name,
+        categoria: product.category?.name || '-',
+        sku: product.sku || '-',
+        stockActual: product.currentStock,
+        stockMinimo: product.minStock,
+        diferencia: diferencia,
+        estado: estado,
+        costoUnitario: csvUtils.formatNumberForCSV(product.costPrice),
+        valorFaltante: csvUtils.formatNumberForCSV(diferencia * (product.costPrice || 0))
+      };
+    });
+
+    const fields = [
+      { label: 'Producto', value: 'producto' },
+      { label: 'Categoría', value: 'categoria' },
+      { label: 'SKU', value: 'sku' },
+      { label: 'Stock Actual', value: 'stockActual' },
+      { label: 'Stock Mínimo', value: 'stockMinimo' },
+      { label: 'Diferencia', value: 'diferencia' },
+      { label: 'Estado', value: 'estado' },
+      { label: 'Costo Unitario', value: 'costoUnitario' },
+      { label: 'Valor Faltante', value: 'valorFaltante' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `productos_stock_bajo_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting low stock products:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

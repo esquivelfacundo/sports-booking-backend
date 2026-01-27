@@ -159,6 +159,172 @@ router.get('/top-clients/export', async (req, res) => {
   }
 });
 
+// Export revenue by weekday to CSV
+router.get('/by-weekday/export', async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const bookingWhere = { 
+      establishmentId,
+      status: { [Op.in]: ['confirmed', 'completed'] }
+    };
+    if (startDate) bookingWhere.date = { [Op.gte]: startDate };
+    if (endDate) bookingWhere.date = { ...bookingWhere.date, [Op.lte]: endDate };
+
+    const bookings = await Booking.findAll({
+      where: bookingWhere,
+      attributes: ['date', 'totalAmount', 'startTime', 'endTime']
+    });
+
+    const dayStats = {};
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+    bookings.forEach(b => {
+      const dayOfWeek = new Date(b.date).getDay();
+      if (!dayStats[dayOfWeek]) {
+        dayStats[dayOfWeek] = { dayOfWeek, count: 0, revenue: 0, hours: 0 };
+      }
+      dayStats[dayOfWeek].count++;
+      dayStats[dayOfWeek].revenue += parseFloat(b.totalAmount || 0);
+      
+      const start = new Date(`2000-01-01T${b.startTime}`);
+      const end = new Date(`2000-01-01T${b.endTime}`);
+      dayStats[dayOfWeek].hours += (end - start) / (1000 * 60 * 60);
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    const totalRevenue = Object.values(dayStats).reduce((sum, d) => sum + d.revenue, 0);
+
+    const csvData = Object.values(dayStats).sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(stat => ({
+      dia: dayNames[stat.dayOfWeek],
+      cantidadReservas: stat.count,
+      horasReservadas: stat.hours.toFixed(1),
+      ingresosTotales: csvUtils.formatNumberForCSV(stat.revenue),
+      ticketPromedio: csvUtils.formatNumberForCSV(stat.count > 0 ? stat.revenue / stat.count : 0),
+      porcentaje: totalRevenue > 0 ? ((stat.revenue / totalRevenue) * 100).toFixed(2) + '%' : '0%'
+    }));
+
+    const fields = [
+      { label: 'Día', value: 'dia' },
+      { label: 'Cantidad Reservas', value: 'cantidadReservas' },
+      { label: 'Horas Reservadas', value: 'horasReservadas' },
+      { label: 'Ingresos Totales', value: 'ingresosTotales' },
+      { label: 'Ticket Promedio', value: 'ticketPromedio' },
+      { label: 'Porcentaje', value: 'porcentaje' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `rendimiento_por_dia_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting by weekday:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
+// Export revenue by court to CSV
+router.get('/revenue-by-court/export', async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const bookingWhere = { status: { [Op.in]: ['confirmed', 'completed'] } };
+    if (startDate) bookingWhere.date = { [Op.gte]: startDate };
+    if (endDate) bookingWhere.date = { ...bookingWhere.date, [Op.lte]: endDate };
+
+    const courts = await Court.findAll({
+      where: { establishmentId, isActive: true },
+      include: [{
+        model: Booking,
+        as: 'bookings',
+        where: bookingWhere,
+        required: false,
+        attributes: ['id', 'totalAmount', 'depositAmount', 'status']
+      }]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    let totalGeneral = 0;
+
+    const courtData = courts.map(court => {
+      const bookings = court.bookings || [];
+      const totalBookings = bookings.length;
+      let totalRevenue = 0;
+      let totalDeposits = 0;
+
+      bookings.forEach(b => {
+        totalRevenue += parseFloat(b.totalAmount || 0);
+        totalDeposits += parseFloat(b.depositAmount || 0);
+      });
+
+      totalGeneral += totalRevenue;
+
+      return {
+        court,
+        totalBookings,
+        totalRevenue,
+        totalDeposits
+      };
+    });
+
+    const csvData = courtData.map(cd => ({
+      cancha: cd.court.name,
+      deporte: cd.court.sportType || '-',
+      cantidadReservas: cd.totalBookings,
+      ingresosTotales: csvUtils.formatNumberForCSV(cd.totalRevenue),
+      depositos: csvUtils.formatNumberForCSV(cd.totalDeposits),
+      ticketPromedio: csvUtils.formatNumberForCSV(cd.totalBookings > 0 ? cd.totalRevenue / cd.totalBookings : 0),
+      porcentaje: totalGeneral > 0 ? ((cd.totalRevenue / totalGeneral) * 100).toFixed(2) + '%' : '0%'
+    }));
+
+    const fields = [
+      { label: 'Cancha', value: 'cancha' },
+      { label: 'Deporte', value: 'deporte' },
+      { label: 'Cantidad Reservas', value: 'cantidadReservas' },
+      { label: 'Ingresos Totales', value: 'ingresosTotales' },
+      { label: 'Depósitos', value: 'depositos' },
+      { label: 'Ticket Promedio', value: 'ticketPromedio' },
+      { label: 'Porcentaje', value: 'porcentaje' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `ingresos_por_cancha_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting revenue by court:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 // Export peak hours to CSV
 router.get('/peak-hours/export', async (req, res) => {
   try {

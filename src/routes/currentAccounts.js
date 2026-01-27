@@ -466,4 +466,94 @@ router.get('/establishment/:establishmentId/export', authenticateToken, async (r
   }
 });
 
+// Export current account movements to CSV
+router.get('/movements/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, accountId, type, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const accountWhere = { establishmentId };
+    if (accountId) accountWhere.id = accountId;
+
+    const accounts = await CurrentAccount.findAll({ where: accountWhere, attributes: ['id'] });
+    const accountIds = accounts.map(a => a.id);
+
+    if (accountIds.length === 0) {
+      return res.status(404).json({ error: 'No accounts found' });
+    }
+
+    const movementWhere = { currentAccountId: { [Op.in]: accountIds } };
+    if (type) movementWhere.type = type;
+    if (startDate || endDate) {
+      movementWhere.createdAt = {};
+      if (startDate) movementWhere.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) movementWhere.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
+    }
+
+    const movements = await CurrentAccountMovement.findAll({
+      where: movementWhere,
+      include: [
+        { model: CurrentAccount, as: 'currentAccount', attributes: ['holderName', 'accountType'] },
+        { model: User, as: 'createdByUser', attributes: ['firstName', 'lastName'] },
+        { model: Order, as: 'order', attributes: ['orderNumber'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(movements);
+
+    const typeLabels = {
+      'charge': 'Cargo',
+      'payment': 'Pago',
+      'adjustment': 'Ajuste'
+    };
+
+    const csvData = movements.map(mov => ({
+      fecha: csvUtils.formatDateTimeForCSV(mov.createdAt),
+      titular: mov.currentAccount?.holderName || '-',
+      tipo: typeLabels[mov.type] || mov.type,
+      descripcion: mov.description || '-',
+      monto: csvUtils.formatNumberForCSV(mov.amount),
+      saldoAnterior: csvUtils.formatNumberForCSV(mov.previousBalance),
+      saldoNuevo: csvUtils.formatNumberForCSV(mov.newBalance),
+      orden: mov.order?.orderNumber || '-',
+      usuario: mov.createdByUser ? `${mov.createdByUser.firstName} ${mov.createdByUser.lastName}`.trim() : '-'
+    }));
+
+    const fields = [
+      { label: 'Fecha', value: 'fecha' },
+      { label: 'Titular', value: 'titular' },
+      { label: 'Tipo', value: 'tipo' },
+      { label: 'Descripción', value: 'descripcion' },
+      { label: 'Monto', value: 'monto' },
+      { label: 'Saldo Anterior', value: 'saldoAnterior' },
+      { label: 'Saldo Nuevo', value: 'saldoNuevo' },
+      { label: 'Orden', value: 'orden' },
+      { label: 'Usuario', value: 'usuario' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `movimientos_cuenta_corriente_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting account movements:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;
