@@ -58,6 +58,8 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     tableName: 'establishment_afip_puntos_venta',
     timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
     indexes: [
       {
         unique: true,

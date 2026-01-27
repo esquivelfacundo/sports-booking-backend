@@ -215,6 +215,7 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     tableName: 'invoices',
     timestamps: true,
+    createdAt: 'created_at',
     updatedAt: false, // Invoices are immutable
     indexes: [
       {
