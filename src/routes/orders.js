@@ -197,6 +197,20 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         }
       }
 
+      // Get billing status from invoices
+      const orderInvoices = await Invoice.findAll({
+        where: { orderId: order.id },
+        attributes: ['id', 'tipoComprobante', 'createdAt'],
+        order: [['created_at', 'ASC']],
+        raw: true
+      });
+      
+      const lastInvoice = orderInvoices[orderInvoices.length - 1];
+      const isLastNC = lastInvoice && [3, 8, 13].includes(lastInvoice.tipoComprobante || lastInvoice.tipo_comprobante);
+      const billingStatus = lastInvoice 
+        ? (isLastNC ? 'credit_note' : 'invoiced')
+        : null;
+
       return {
         ...order,
         client,
@@ -205,7 +219,8 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         items: finalItems,
         total: calculatedTotal,
         status: calculatedStatus,
-        paymentStatus: calculatedPaymentStatus
+        paymentStatus: calculatedPaymentStatus,
+        billingStatus
       };
     }));
 
@@ -507,31 +522,45 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Get invoice if exists (use snake_case since orderRaw comes from raw: true query)
-    let invoice = null;
-    const invoiceId = orderRaw.invoiceId || orderRaw.invoice_id;
-    if (invoiceId) {
-      const invoiceRaw = await Invoice.findByPk(invoiceId, {
-        attributes: [
-          'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
-          'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision'
-        ],
-        raw: true
-      });
-      // Map snake_case to camelCase for frontend
-      if (invoiceRaw) {
-        invoice = {
-          id: invoiceRaw.id,
-          tipoComprobante: invoiceRaw.tipoComprobante || invoiceRaw.tipo_comprobante,
-          tipoComprobanteNombre: invoiceRaw.tipoComprobanteNombre || invoiceRaw.tipo_comprobante_nombre,
-          puntoVenta: invoiceRaw.puntoVenta || invoiceRaw.punto_venta,
-          numeroComprobante: invoiceRaw.numeroComprobante || invoiceRaw.numero_comprobante,
-          cae: invoiceRaw.cae,
-          caeVencimiento: invoiceRaw.caeVencimiento || invoiceRaw.cae_vencimiento,
-          fechaEmision: invoiceRaw.fechaEmision || invoiceRaw.fecha_emision
-        };
-      }
-    }
+    // Get ALL invoices for this order (facturas + notas de crédito)
+    const allInvoicesRaw = await Invoice.findAll({
+      where: { orderId: id },
+      attributes: [
+        'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
+        'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
+        'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'createdAt'
+      ],
+      order: [['created_at', 'ASC']],
+      raw: true
+    });
+
+    // Map to camelCase and build invoice history
+    const invoiceHistory = allInvoicesRaw.map(inv => ({
+      id: inv.id,
+      tipoComprobante: inv.tipoComprobante || inv.tipo_comprobante,
+      tipoComprobanteNombre: inv.tipoComprobanteNombre || inv.tipo_comprobante_nombre,
+      puntoVenta: inv.puntoVenta || inv.punto_venta,
+      numeroComprobante: inv.numeroComprobante || inv.numero_comprobante,
+      cae: inv.cae,
+      caeVencimiento: inv.caeVencimiento || inv.cae_vencimiento,
+      fechaEmision: inv.fechaEmision || inv.fecha_emision,
+      importeTotal: inv.importeTotal || inv.importe_total,
+      status: inv.status,
+      comprobanteAsociadoId: inv.comprobanteAsociadoId || inv.comprobante_asociado_id,
+      motivoNc: inv.motivoNc || inv.motivo_nc,
+      createdAt: inv.createdAt || inv.created_at,
+      isNotaCredito: [3, 8, 13].includes(inv.tipoComprobante || inv.tipo_comprobante)
+    }));
+
+    // Legacy: keep invoice field for backwards compatibility (last factura, not NC)
+    const lastFactura = invoiceHistory.filter(i => !i.isNotaCredito).pop();
+    const invoice = lastFactura || null;
+
+    // Determine billing status: 'invoiced' | 'credit_note' | null
+    const lastInvoiceEvent = invoiceHistory[invoiceHistory.length - 1];
+    const billingStatus = lastInvoiceEvent 
+      ? (lastInvoiceEvent.isNotaCredito ? 'credit_note' : 'invoiced')
+      : null;
 
     const order = {
       ...orderRaw,
@@ -544,6 +573,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
       items: itemsWithProducts,
       payments,
       invoice,
+      invoiceHistory,
+      billingStatus,
       status: calculatedStatus,
       paymentStatus: calculatedPaymentStatus,
       total: calculatedTotal
