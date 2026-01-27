@@ -360,7 +360,7 @@ router.get('/export', authenticateToken, async (req, res) => {
     csvUtils.validateDataSize(products);
 
     const csvData = products.map(product => {
-      const stockStatus = product.currentStock === 0 ? 'Sin Stock' :
+      const productStatus = product.currentStock === 0 ? 'Sin Stock' :
         product.currentStock <= product.minStock ? 'Stock Bajo' : 'Normal';
       const valorTotal = (product.currentStock || 0) * (product.cost || 0);
       
@@ -373,7 +373,7 @@ router.get('/export', authenticateToken, async (req, res) => {
         stockMaximo: product.maxStock || '-',
         costoUnitario: csvUtils.formatNumberForCSV(product.cost),
         valorTotal: csvUtils.formatNumberForCSV(valorTotal),
-        estado: stockStatus,
+        estado: productStatus,
         precio: csvUtils.formatNumberForCSV(product.price)
       };
     });
