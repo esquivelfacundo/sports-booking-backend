@@ -19,6 +19,73 @@ router.get('/categories', getExpenseCategories);
 // Export expenses to CSV
 router.get('/establishment/:establishmentId/export', exportExpenses);
 
+// Export expenses by category to CSV
+const { Expense, Establishment } = require('../models');
+const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
+
+router.get('/by-category/export', async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId };
+    if (startDate) where.expenseDate = { [Op.gte]: startDate };
+    if (endDate) where.expenseDate = { ...where.expenseDate, [Op.lte]: endDate };
+
+    const expensesByCategory = await Expense.findAll({
+      where,
+      attributes: [
+        'category',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad'],
+        [sequelize.fn('SUM', sequelize.col('amount')), 'total']
+      ],
+      group: ['category'],
+      raw: true
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    const totalGeneral = expensesByCategory.reduce((sum, cat) => sum + parseFloat(cat.total || 0), 0);
+
+    const csvData = expensesByCategory.map(cat => ({
+      categoria: cat.category,
+      cantidadGastos: cat.cantidad,
+      montoTotal: csvUtils.formatNumberForCSV(cat.total),
+      porcentaje: totalGeneral > 0 ? ((parseFloat(cat.total) / totalGeneral) * 100).toFixed(2) + '%' : '0%',
+      promedioGasto: csvUtils.formatNumberForCSV(cat.cantidad > 0 ? cat.total / cat.cantidad : 0)
+    }));
+
+    const fields = [
+      { label: 'Categoría', value: 'categoria' },
+      { label: 'Cantidad Gastos', value: 'cantidadGastos' },
+      { label: 'Monto Total', value: 'montoTotal' },
+      { label: 'Porcentaje', value: 'porcentaje' },
+      { label: 'Promedio por Gasto', value: 'promedioGasto' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `gastos_por_categoria_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting expenses by category:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 // Get expenses for an establishment
 router.get('/establishment/:establishmentId', getExpenses);
 

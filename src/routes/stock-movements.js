@@ -305,4 +305,88 @@ router.get('/summary', authenticateToken, async (req, res) => {
 // Get purchases by product
 router.get('/purchases-by-product/:establishmentId', authenticateToken, getPurchasesByProduct);
 
+// Export purchases (stock entries) to CSV
+router.get('/purchases/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate, supplierId } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      type: 'entrada'
+    };
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
+    }
+
+    if (supplierId) {
+      where.supplierId = supplierId;
+    }
+
+    const movements = await StockMovement.findAll({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['name', 'sku', 'unit'] },
+        { model: User, as: 'createdByUser', attributes: ['firstName', 'lastName'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(movements);
+
+    const csvData = movements.map(mov => ({
+      fecha: csvUtils.formatDateTimeForCSV(mov.createdAt),
+      producto: mov.product?.name || '-',
+      sku: mov.product?.sku || '-',
+      cantidad: mov.quantity,
+      unidad: mov.product?.unit || '-',
+      costoUnitario: csvUtils.formatNumberForCSV(mov.unitCost),
+      costoTotal: csvUtils.formatNumberForCSV(mov.totalCost),
+      proveedor: mov.supplierName || '-',
+      factura: mov.invoiceNumber || '-',
+      usuario: mov.createdByUser ? `${mov.createdByUser.firstName} ${mov.createdByUser.lastName}`.trim() : '-',
+      notas: mov.notes || ''
+    }));
+
+    const fields = [
+      { label: 'Fecha', value: 'fecha' },
+      { label: 'Producto', value: 'producto' },
+      { label: 'SKU', value: 'sku' },
+      { label: 'Cantidad', value: 'cantidad' },
+      { label: 'Unidad', value: 'unidad' },
+      { label: 'Costo Unitario', value: 'costoUnitario' },
+      { label: 'Costo Total', value: 'costoTotal' },
+      { label: 'Proveedor', value: 'proveedor' },
+      { label: 'Factura', value: 'factura' },
+      { label: 'Usuario', value: 'usuario' },
+      { label: 'Notas', value: 'notas' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `compras_proveedores_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting purchases:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;
