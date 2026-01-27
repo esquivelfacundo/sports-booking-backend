@@ -343,4 +343,196 @@ function getPaymentMethodField(paymentMethod) {
   return methodMap[paymentMethod] || 'totalOther';
 }
 
+// Export movements to CSV
+router.get('/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, cashRegisterId, type, paymentMethod, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId };
+
+    if (cashRegisterId) {
+      where.cashRegisterId = cashRegisterId;
+    }
+
+    if (type) {
+      where.type = type;
+    }
+
+    if (paymentMethod) {
+      where.paymentMethod = paymentMethod;
+    }
+
+    if (startDate || endDate) {
+      where.registeredAt = {};
+      if (startDate) {
+        where.registeredAt[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        where.registeredAt[Op.lte] = new Date(endDate + 'T23:59:59');
+      }
+    }
+
+    const movements = await CashRegisterMovement.findAll({
+      where,
+      include: [
+        { model: CashRegister, as: 'cashRegister', attributes: ['openedAt', 'closedAt'] },
+        { model: User, as: 'registeredByUser', attributes: ['firstName', 'lastName'] },
+        { model: Order, as: 'order', attributes: ['orderNumber'] },
+        { model: Booking, as: 'booking', attributes: ['id'] },
+        { model: ExpenseCategory, as: 'expenseCategory', attributes: ['name'] }
+      ],
+      order: [['registeredAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(movements);
+
+    const typeLabels = {
+      'sale': 'Venta',
+      'expense': 'Gasto',
+      'initial_cash': 'Efectivo Inicial',
+      'cash_withdrawal': 'Retiro',
+      'adjustment': 'Ajuste'
+    };
+
+    const paymentMethodLabels = {
+      'cash': 'Efectivo',
+      'card': 'Tarjeta',
+      'transfer': 'Transferencia',
+      'credit_card': 'Tarjeta Crédito',
+      'debit_card': 'Tarjeta Débito',
+      'mercadopago': 'MercadoPago'
+    };
+
+    const csvData = movements.map(mov => ({
+      fechaHora: csvUtils.formatDateTimeForCSV(mov.registeredAt),
+      tipo: typeLabels[mov.type] || mov.type,
+      descripcion: mov.description || '-',
+      metodoPago: paymentMethodLabels[mov.paymentMethod] || mov.paymentMethod,
+      monto: csvUtils.formatNumberForCSV(mov.amount),
+      categoria: mov.expenseCategory?.name || '-',
+      ordenReserva: mov.order?.orderNumber || (mov.bookingId ? `Reserva` : '-'),
+      usuario: mov.registeredByUser ? `${mov.registeredByUser.firstName} ${mov.registeredByUser.lastName}`.trim() : '-',
+      notas: mov.notes || ''
+    }));
+
+    const fields = [
+      { label: 'Fecha/Hora', value: 'fechaHora' },
+      { label: 'Tipo', value: 'tipo' },
+      { label: 'Descripción', value: 'descripcion' },
+      { label: 'Método de Pago', value: 'metodoPago' },
+      { label: 'Monto', value: 'monto' },
+      { label: 'Categoría', value: 'categoria' },
+      { label: 'Orden/Reserva', value: 'ordenReserva' },
+      { label: 'Usuario', value: 'usuario' },
+      { label: 'Notas', value: 'notas' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `movimientos_caja_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting movements:', error);
+    res.status(500).json({ error: 'Failed to export movements', message: error.message });
+  }
+});
+
+// Export income by payment method
+router.get('/income-by-method/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      type: 'sale',
+      amount: { [Op.gt]: 0 }
+    };
+
+    if (startDate || endDate) {
+      where.registeredAt = {};
+      if (startDate) {
+        where.registeredAt[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        where.registeredAt[Op.lte] = new Date(endDate + 'T23:59:59');
+      }
+    }
+
+    const incomeByMethod = await CashRegisterMovement.findAll({
+      where,
+      attributes: [
+        'paymentMethod',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'cantidad'],
+        [sequelize.fn('SUM', sequelize.col('amount')), 'total']
+      ],
+      group: ['paymentMethod'],
+      raw: true
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const paymentMethodLabels = {
+      'cash': 'Efectivo',
+      'card': 'Tarjeta',
+      'transfer': 'Transferencia',
+      'credit_card': 'Tarjeta Crédito',
+      'debit_card': 'Tarjeta Débito',
+      'mercadopago': 'MercadoPago'
+    };
+
+    const totalGeneral = incomeByMethod.reduce((sum, item) => sum + parseFloat(item.total || 0), 0);
+
+    const csvData = incomeByMethod.map(item => ({
+      metodoPago: paymentMethodLabels[item.paymentMethod] || item.paymentMethod,
+      cantidadOperaciones: item.cantidad,
+      montoTotal: csvUtils.formatNumberForCSV(item.total),
+      porcentaje: totalGeneral > 0 ? ((parseFloat(item.total) / totalGeneral) * 100).toFixed(2) + '%' : '0%'
+    }));
+
+    const fields = [
+      { label: 'Método de Pago', value: 'metodoPago' },
+      { label: 'Cantidad Operaciones', value: 'cantidadOperaciones' },
+      { label: 'Monto Total', value: 'montoTotal' },
+      { label: 'Porcentaje', value: 'porcentaje' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `ingresos_metodo_pago_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting income by method:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

@@ -74,4 +74,83 @@ router.delete(
   deleteClient
 );
 
+// Export clients to CSV
+const { Client, Establishment } = require('../models');
+router.get(
+  '/establishment/:establishmentId/export',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { establishmentId } = req.params;
+      const { hasDebt, isActive } = req.query;
+
+      const establishment = await Establishment.findByPk(establishmentId);
+      if (!establishment) {
+        return res.status(404).json({ error: 'Establishment not found' });
+      }
+
+      if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const where = { establishmentId };
+
+      if (hasDebt !== undefined) {
+        where.hasDebt = hasDebt === 'true';
+      }
+
+      if (isActive !== undefined) {
+        where.isActive = isActive === 'true';
+      }
+
+      const clients = await Client.findAll({
+        where,
+        order: [['name', 'ASC']]
+      });
+
+      const csvUtils = require('../utils/csvGenerator');
+      csvUtils.validateDataSize(clients);
+
+      const csvData = clients.map(client => ({
+        nombre: client.name,
+        telefono: client.phone || '-',
+        email: client.email || '-',
+        reservasTotales: client.totalBookings || 0,
+        reservasCompletadas: client.completedBookings || 0,
+        reservasCanceladas: client.cancelledBookings || 0,
+        noShow: client.noShowBookings || 0,
+        totalGastado: csvUtils.formatNumberForCSV(client.totalSpent),
+        deuda: csvUtils.formatNumberForCSV(client.debtAmount),
+        ultimaReserva: client.lastBookingDate ? csvUtils.formatDateForCSV(client.lastBookingDate) : '-',
+        estado: client.isActive ? 'Activo' : 'Inactivo',
+        notas: client.notes || ''
+      }));
+
+      const fields = [
+        { label: 'Nombre', value: 'nombre' },
+        { label: 'Teléfono', value: 'telefono' },
+        { label: 'Email', value: 'email' },
+        { label: 'Reservas Totales', value: 'reservasTotales' },
+        { label: 'Reservas Completadas', value: 'reservasCompletadas' },
+        { label: 'Reservas Canceladas', value: 'reservasCanceladas' },
+        { label: 'No Show', value: 'noShow' },
+        { label: 'Total Gastado', value: 'totalGastado' },
+        { label: 'Deuda', value: 'deuda' },
+        { label: 'Última Reserva', value: 'ultimaReserva' },
+        { label: 'Estado', value: 'estado' },
+        { label: 'Notas', value: 'notas' }
+      ];
+
+      const csv = csvUtils.generateCSV(csvData, fields);
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `clientes_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+      csvUtils.sendCSVResponse(res, csv, filename);
+    } catch (error) {
+      console.error('Error exporting clients:', error);
+      res.status(500).json({ error: 'Failed to export clients', message: error.message });
+    }
+  }
+);
+
 module.exports = router;

@@ -383,4 +383,87 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
   }
 });
 
+// Export current accounts to CSV
+router.get('/establishment/:establishmentId/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId } = req.params;
+    const { accountType, hasBalance } = req.query;
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { establishmentId, isActive: true };
+
+    if (accountType) {
+      where.accountType = accountType;
+    }
+
+    if (hasBalance === 'true') {
+      where.currentBalance = { [Op.ne]: 0 };
+    }
+
+    const accounts = await CurrentAccount.findAll({
+      where,
+      include: [
+        { model: Client, as: 'client' },
+        { model: EstablishmentStaff, as: 'staff' }
+      ],
+      order: [['holderName', 'ASC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(accounts);
+
+    const accountTypeLabels = {
+      'employee': 'Empleado',
+      'client': 'Cliente',
+      'supplier': 'Proveedor',
+      'other': 'Otro'
+    };
+
+    const csvData = accounts.map(account => ({
+      titular: account.holderName,
+      telefono: account.holderPhone || '-',
+      email: account.holderEmail || '-',
+      tipo: accountTypeLabels[account.accountType] || account.accountType,
+      saldoActual: csvUtils.formatNumberForCSV(account.currentBalance),
+      totalCompras: csvUtils.formatNumberForCSV(account.totalPurchases),
+      totalPagos: csvUtils.formatNumberForCSV(account.totalPayments),
+      limiteCredito: account.creditLimit ? csvUtils.formatNumberForCSV(account.creditLimit) : 'Sin límite',
+      descuento: account.discountPercentage ? `${account.discountPercentage}%` : '-',
+      precioCosto: account.useCostPrice ? 'Sí' : 'No',
+      notas: account.notes || ''
+    }));
+
+    const fields = [
+      { label: 'Titular', value: 'titular' },
+      { label: 'Teléfono', value: 'telefono' },
+      { label: 'Email', value: 'email' },
+      { label: 'Tipo', value: 'tipo' },
+      { label: 'Saldo Actual', value: 'saldoActual' },
+      { label: 'Total Compras', value: 'totalCompras' },
+      { label: 'Total Pagos', value: 'totalPagos' },
+      { label: 'Límite Crédito', value: 'limiteCredito' },
+      { label: 'Descuento', value: 'descuento' },
+      { label: 'Precio Costo', value: 'precioCosto' },
+      { label: 'Notas', value: 'notas' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `cuentas_corrientes_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting current accounts:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

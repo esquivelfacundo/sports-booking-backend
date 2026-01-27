@@ -1025,4 +1025,93 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
   }
 });
 
+// Export sales by product
+router.get('/sales-by-product/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, startDate, endDate, categoryId } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const orderWhere = { establishmentId, status: { [Op.ne]: 'cancelled' } };
+
+    if (startDate || endDate) {
+      orderWhere.createdAt = {};
+      if (startDate) {
+        orderWhere.createdAt[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        orderWhere.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
+      }
+    }
+
+    const orders = await Order.findAll({
+      where: orderWhere,
+      include: [{ model: OrderItem, as: 'items' }],
+      attributes: ['id']
+    });
+
+    const productSales = {};
+    orders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const key = item.productId || item.productName;
+        if (!productSales[key]) {
+          productSales[key] = {
+            productName: item.productName,
+            productId: item.productId,
+            quantity: 0,
+            totalRevenue: 0
+          };
+        }
+        productSales[key].quantity += item.quantity;
+        productSales[key].totalRevenue += parseFloat(item.totalPrice || 0);
+      });
+    });
+
+    const sortedProducts = Object.values(productSales).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+    const csvUtils = require('../utils/csvGenerator');
+    csvUtils.validateDataSize(sortedProducts);
+
+    const totalRevenue = sortedProducts.reduce((sum, p) => sum + p.totalRevenue, 0);
+
+    const csvData = sortedProducts.map((product, index) => ({
+      ranking: index + 1,
+      producto: product.productName,
+      cantidadVendida: product.quantity,
+      ingresoTotal: csvUtils.formatNumberForCSV(product.totalRevenue),
+      porcentaje: totalRevenue > 0 ? ((product.totalRevenue / totalRevenue) * 100).toFixed(2) + '%' : '0%',
+      promedioUnitario: csvUtils.formatNumberForCSV(product.quantity > 0 ? product.totalRevenue / product.quantity : 0)
+    }));
+
+    const fields = [
+      { label: 'Ranking', value: 'ranking' },
+      { label: 'Producto', value: 'producto' },
+      { label: 'Cantidad Vendida', value: 'cantidadVendida' },
+      { label: 'Ingreso Total', value: 'ingresoTotal' },
+      { label: 'Porcentaje', value: 'porcentaje' },
+      { label: 'Promedio Unitario', value: 'promedioUnitario' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `ventas_por_producto_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting sales by product:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;
