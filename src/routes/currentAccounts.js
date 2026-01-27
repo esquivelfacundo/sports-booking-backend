@@ -556,4 +556,105 @@ router.get('/movements/export', authenticateToken, async (req, res) => {
   }
 });
 
+// Export pending debts to CSV
+router.get('/debts/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, minAmount, minDays } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      isActive: true,
+      currentBalance: { [Op.gt]: 0 }
+    };
+
+    if (minAmount) {
+      where.currentBalance = { [Op.gte]: parseFloat(minAmount) };
+    }
+
+    const accounts = await CurrentAccount.findAll({
+      where,
+      include: [
+        { model: Client, as: 'client' }
+      ],
+      order: [['currentBalance', 'DESC']]
+    });
+
+    // Get last movement for each account
+    const accountIds = accounts.map(a => a.id);
+    const lastMovements = await CurrentAccountMovement.findAll({
+      where: { currentAccountId: { [Op.in]: accountIds } },
+      order: [['createdAt', 'DESC']],
+      attributes: ['currentAccountId', 'createdAt']
+    });
+
+    const lastMovementMap = {};
+    lastMovements.forEach(mov => {
+      if (!lastMovementMap[mov.currentAccountId]) {
+        lastMovementMap[mov.currentAccountId] = mov.createdAt;
+      }
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const today = new Date();
+    let csvData = accounts.map(account => {
+      const lastTransaction = lastMovementMap[account.id] ? new Date(lastMovementMap[account.id]) : null;
+      const daysOfDebt = lastTransaction 
+        ? Math.floor((today - lastTransaction) / (1000 * 60 * 60 * 24))
+        : 0;
+
+      return {
+        titular: account.holderName,
+        telefono: account.holderPhone || '-',
+        email: account.holderEmail || '-',
+        saldoDeudor: csvUtils.formatNumberForCSV(account.currentBalance),
+        diasDeDeuda: daysOfDebt,
+        ultimaTransaccion: lastTransaction ? csvUtils.formatDateForCSV(lastTransaction) : '-',
+        limiteCredito: account.creditLimit ? csvUtils.formatNumberForCSV(account.creditLimit) : 'Sin límite',
+        totalCompras: csvUtils.formatNumberForCSV(account.totalPurchases),
+        totalPagos: csvUtils.formatNumberForCSV(account.totalPayments)
+      };
+    });
+
+    // Filter by minimum days if specified
+    if (minDays) {
+      csvData = csvData.filter(d => d.diasDeDeuda >= parseInt(minDays));
+    }
+
+    const fields = [
+      { label: 'Titular', value: 'titular' },
+      { label: 'Teléfono', value: 'telefono' },
+      { label: 'Email', value: 'email' },
+      { label: 'Saldo Deudor', value: 'saldoDeudor' },
+      { label: 'Días de Deuda', value: 'diasDeDeuda' },
+      { label: 'Última Transacción', value: 'ultimaTransaccion' },
+      { label: 'Límite Crédito', value: 'limiteCredito' },
+      { label: 'Total Compras', value: 'totalCompras' },
+      { label: 'Total Pagos', value: 'totalPagos' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `deudas_pendientes_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting debts:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

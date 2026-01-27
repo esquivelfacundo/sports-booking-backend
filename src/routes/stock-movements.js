@@ -479,4 +479,79 @@ router.get('/purchases/export', authenticateToken, async (req, res) => {
   }
 });
 
+// Export waste/shrinkage movements to CSV
+router.get('/waste/export', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, productId, startDate, endDate } = req.query;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'Establishment ID is required' });
+    }
+
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const where = { 
+      establishmentId,
+      type: 'merma'
+    };
+
+    if (productId) where.productId = productId;
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
+    }
+
+    const movements = await StockMovement.findAll({
+      where,
+      include: [
+        { model: Product, as: 'product', attributes: ['name', 'sku', 'costPrice'] },
+        { model: User, as: 'user', attributes: ['firstName', 'lastName'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const csvUtils = require('../utils/csvGenerator');
+
+    const csvData = movements.map(mov => ({
+      fecha: csvUtils.formatDateTimeForCSV(mov.createdAt),
+      producto: mov.product?.name || '-',
+      sku: mov.product?.sku || '-',
+      cantidad: mov.quantity,
+      costoUnitario: csvUtils.formatNumberForCSV(mov.unitCost || mov.product?.costPrice || 0),
+      costoTotal: csvUtils.formatNumberForCSV(mov.totalCost || (mov.quantity * (mov.unitCost || mov.product?.costPrice || 0))),
+      motivo: mov.notes || mov.reason || '-',
+      usuario: mov.user ? `${mov.user.firstName} ${mov.user.lastName}`.trim() : '-'
+    }));
+
+    const fields = [
+      { label: 'Fecha', value: 'fecha' },
+      { label: 'Producto', value: 'producto' },
+      { label: 'SKU', value: 'sku' },
+      { label: 'Cantidad', value: 'cantidad' },
+      { label: 'Costo Unitario', value: 'costoUnitario' },
+      { label: 'Costo Total', value: 'costoTotal' },
+      { label: 'Motivo', value: 'motivo' },
+      { label: 'Usuario', value: 'usuario' }
+    ];
+
+    const csv = csvUtils.generateCSV(csvData, fields);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `mermas_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+    csvUtils.sendCSVResponse(res, csv, filename);
+  } catch (error) {
+    console.error('Error exporting waste:', error);
+    res.status(500).json({ error: 'Failed to export', message: error.message });
+  }
+});
+
 module.exports = router;

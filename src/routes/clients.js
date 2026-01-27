@@ -153,4 +153,84 @@ router.get(
   }
 );
 
+// Export inactive clients to CSV
+router.get(
+  '/establishment/:establishmentId/inactive/export',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { establishmentId } = req.params;
+      const { minDaysInactive = 30 } = req.query;
+
+      const { Establishment, Client } = require('../models');
+      const { Op } = require('sequelize');
+
+      const establishment = await Establishment.findByPk(establishmentId);
+      if (!establishment) {
+        return res.status(404).json({ error: 'Establishment not found' });
+      }
+
+      if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - parseInt(minDaysInactive));
+
+      const clients = await Client.findAll({
+        where: {
+          establishmentId,
+          isActive: true,
+          [Op.or]: [
+            { lastBookingDate: { [Op.lt]: cutoffDate } },
+            { lastBookingDate: null }
+          ]
+        },
+        order: [['lastBookingDate', 'ASC NULLS FIRST']]
+      });
+
+      const csvUtils = require('../utils/csvGenerator');
+
+      const today = new Date();
+      const csvData = clients.map(client => {
+        const lastBooking = client.lastBookingDate ? new Date(client.lastBookingDate) : null;
+        const daysInactive = lastBooking 
+          ? Math.floor((today - lastBooking) / (1000 * 60 * 60 * 24))
+          : 'Sin reservas';
+
+        return {
+          nombre: client.name,
+          telefono: client.phone || '-',
+          email: client.email || '-',
+          ultimaReserva: lastBooking ? csvUtils.formatDateForCSV(lastBooking) : 'Nunca',
+          diasSinActividad: daysInactive,
+          reservasTotales: client.totalBookings || 0,
+          totalGastado: csvUtils.formatNumberForCSV(client.totalSpent || 0),
+          notas: client.notes || ''
+        };
+      });
+
+      const fields = [
+        { label: 'Nombre', value: 'nombre' },
+        { label: 'Teléfono', value: 'telefono' },
+        { label: 'Email', value: 'email' },
+        { label: 'Última Reserva', value: 'ultimaReserva' },
+        { label: 'Días sin Actividad', value: 'diasSinActividad' },
+        { label: 'Reservas Totales', value: 'reservasTotales' },
+        { label: 'Total Gastado', value: 'totalGastado' },
+        { label: 'Notas', value: 'notas' }
+      ];
+
+      const csv = csvUtils.generateCSV(csvData, fields);
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `clientes_inactivos_${establishment.slug || establishmentId}_${dateStr}.csv`;
+
+      csvUtils.sendCSVResponse(res, csv, filename);
+    } catch (error) {
+      console.error('Error exporting inactive clients:', error);
+      res.status(500).json({ error: 'Failed to export', message: error.message });
+    }
+  }
+);
+
 module.exports = router;
