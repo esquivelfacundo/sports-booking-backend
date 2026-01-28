@@ -805,13 +805,15 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Create current account movement if this is a current account sale
     if (currentAccountId) {
+      console.log(`[DirectSale] Creating movement for current account ${currentAccountId}, total: ${total}`);
       const currentAccount = await CurrentAccount.findByPk(currentAccountId, { transaction });
       
       if (currentAccount) {
         const newBalance = parseFloat(currentAccount.currentBalance) + total;
+        console.log(`[DirectSale] Current balance: ${currentAccount.currentBalance}, new balance: ${newBalance}`);
         
         // Create movement record
-        await CurrentAccountMovement.create({
+        const movement = await CurrentAccountMovement.create({
           currentAccountId,
           establishmentId,
           movementType: 'purchase',
@@ -821,13 +823,19 @@ router.post('/', authenticateToken, async (req, res) => {
           description: `Compra - Pedido #${orderNumber}`,
           registeredBy: req.user.id
         }, { transaction });
+        console.log(`[DirectSale] Created movement ${movement.id}`);
 
         // Update account balance and totals
         await currentAccount.update({
           currentBalance: newBalance,
           totalPurchases: parseFloat(currentAccount.totalPurchases) + total
         }, { transaction });
+        console.log(`[DirectSale] Updated account balance`);
+      } else {
+        console.log(`[DirectSale] Current account ${currentAccountId} not found`);
       }
+    } else {
+      console.log(`[DirectSale] No currentAccountId provided`);
     }
 
     await transaction.commit();

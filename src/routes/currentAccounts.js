@@ -68,15 +68,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
     // Get movements separately to avoid issues with nested includes
     let movements = [];
     try {
+      console.log(`[CurrentAccount] Fetching movements for account ${id}`);
       movements = await CurrentAccountMovement.findAll({
         where: { currentAccountId: id },
         limit: parseInt(movementsLimit),
-        order: [['createdAt', 'DESC']],
+        order: [['created_at', 'DESC']],
         include: [
           { model: Order, as: 'order', attributes: ['id', 'orderNumber'] },
           { model: User, as: 'registeredByUser', attributes: ['id', 'name', 'email'] }
         ]
       });
+      console.log(`[CurrentAccount] Found ${movements.length} movements for account ${id}`);
     } catch (movementError) {
       console.error('Error fetching movements:', movementError);
       // Continue without movements if there's an error
