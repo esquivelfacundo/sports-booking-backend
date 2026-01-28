@@ -199,7 +199,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
 
       // Get billing status from invoices
       const orderInvoices = await Invoice.findAll({
-        where: { orderId: order.id },
+        where: { order_id: order.id },
         attributes: ['id', ['tipo_comprobante', 'tipoComprobante'], 'createdAt'],
         order: [['created_at', 'ASC']],
         raw: true
