@@ -75,7 +75,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         order: [['created_at', 'DESC']],
         include: [
           { model: Order, as: 'order', attributes: ['id', 'orderNumber'] },
-          { model: User, as: 'registeredByUser', attributes: ['id', 'name', 'email'] }
+          { model: User, as: 'registeredByUser', attributes: ['id', 'firstName', 'lastName', 'email'] }
         ]
       });
       console.log(`[CurrentAccount] Found ${movements.length} movements for account ${id}`);
