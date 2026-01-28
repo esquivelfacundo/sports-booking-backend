@@ -10,9 +10,10 @@ const { Parser } = require('json2csv');
 const generateCSV = (data, fields, filename = 'export.csv') => {
   try {
     // Configuración del parser
+    // Usar punto y coma como delimitador para compatibilidad con Excel en español/latino
     const opts = {
       fields,
-      delimiter: ',',
+      delimiter: ';',
       quote: '"',
       withBOM: true, // Para compatibilidad con Excel
       excelStrings: false
