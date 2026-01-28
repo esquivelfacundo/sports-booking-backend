@@ -200,6 +200,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       // Get billing status - check if order has invoiceId
       let billingStatus = null;
       const orderInvoiceId = order.invoiceId || order.invoice_id;
+      console.log(`Order ${order.id} - invoiceId: ${order.invoiceId}, invoice_id: ${order.invoice_id}, resolved: ${orderInvoiceId}`);
       if (orderInvoiceId) {
         try {
           // Get invoice and any credit notes referencing it
