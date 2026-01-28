@@ -393,9 +393,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(orderRaw.establishmentId, {
-      attributes: ['id', 'name', 'userId'],
+      attributes: ['id', 'name', 'slug', 'userId'],
       raw: true
     });
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
     if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -543,72 +546,76 @@ router.get('/:id', authenticateToken, async (req, res) => {
     let invoice = null;
     let billingStatus = null;
     
-    const orderInvoiceId = orderRaw.invoiceId || orderRaw.invoice_id;
-    if (orderInvoiceId) {
-      // Get the main invoice
-      const mainInvoice = await Invoice.findByPk(orderInvoiceId, {
-        attributes: [
-          'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
-          'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-          'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'createdAt'
-        ]
-      });
-      
-      if (mainInvoice) {
-        const mainInvoiceData = {
-          id: mainInvoice.id,
-          tipoComprobante: mainInvoice.tipoComprobante,
-          tipoComprobanteNombre: mainInvoice.tipoComprobanteNombre,
-          puntoVenta: mainInvoice.puntoVenta,
-          numeroComprobante: mainInvoice.numeroComprobante,
-          cae: mainInvoice.cae,
-          caeVencimiento: mainInvoice.caeVencimiento,
-          fechaEmision: mainInvoice.fechaEmision,
-          importeTotal: mainInvoice.importeTotal,
-          status: mainInvoice.status,
-          createdAt: mainInvoice.createdAt,
-          isNotaCredito: false
-        };
-        
-        invoiceHistory.push(mainInvoiceData);
-        invoice = mainInvoiceData;
-        billingStatus = 'invoiced';
-        
-        // Get any credit notes referencing this invoice
-        const creditNotes = await Invoice.findAll({
-          where: { comprobanteAsociadoId: orderInvoiceId },
+    try {
+      const orderInvoiceId = orderRaw.invoiceId || orderRaw.invoice_id;
+      if (orderInvoiceId) {
+        // Get the main invoice
+        const mainInvoice = await Invoice.findByPk(orderInvoiceId, {
           attributes: [
             'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
             'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-            'importeTotal', 'status', 'motivoNc', 'createdAt'
-          ],
-          order: [['createdAt', 'ASC']]
+            'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'createdAt'
+          ]
         });
         
-        for (const nc of creditNotes) {
-          invoiceHistory.push({
-            id: nc.id,
-            tipoComprobante: nc.tipoComprobante,
-            tipoComprobanteNombre: nc.tipoComprobanteNombre,
-            puntoVenta: nc.puntoVenta,
-            numeroComprobante: nc.numeroComprobante,
-            cae: nc.cae,
-            caeVencimiento: nc.caeVencimiento,
-            fechaEmision: nc.fechaEmision,
-            importeTotal: nc.importeTotal,
-            status: nc.status,
-            motivoNc: nc.motivoNc,
-            createdAt: nc.createdAt,
-            isNotaCredito: true
+        if (mainInvoice) {
+          const mainInvoiceData = {
+            id: mainInvoice.id,
+            tipoComprobante: mainInvoice.tipoComprobante,
+            tipoComprobanteNombre: mainInvoice.tipoComprobanteNombre,
+            puntoVenta: mainInvoice.puntoVenta,
+            numeroComprobante: mainInvoice.numeroComprobante,
+            cae: mainInvoice.cae,
+            caeVencimiento: mainInvoice.caeVencimiento,
+            fechaEmision: mainInvoice.fechaEmision,
+            importeTotal: mainInvoice.importeTotal,
+            status: mainInvoice.status,
+            createdAt: mainInvoice.createdAt,
+            isNotaCredito: false
+          };
+          
+          invoiceHistory.push(mainInvoiceData);
+          invoice = mainInvoiceData;
+          billingStatus = 'invoiced';
+          
+          // Get any credit notes referencing this invoice
+          const creditNotes = await Invoice.findAll({
+            where: { comprobanteAsociadoId: orderInvoiceId },
+            attributes: [
+              'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
+              'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
+              'importeTotal', 'status', 'motivoNc', 'createdAt'
+            ],
+            order: [['createdAt', 'ASC']]
           });
-        }
-        
-        // Update billing status if last item is a credit note
-        if (invoiceHistory.length > 0) {
-          const lastItem = invoiceHistory[invoiceHistory.length - 1];
-          billingStatus = lastItem.isNotaCredito ? 'credit_note' : 'invoiced';
+          
+          for (const nc of creditNotes) {
+            invoiceHistory.push({
+              id: nc.id,
+              tipoComprobante: nc.tipoComprobante,
+              tipoComprobanteNombre: nc.tipoComprobanteNombre,
+              puntoVenta: nc.puntoVenta,
+              numeroComprobante: nc.numeroComprobante,
+              cae: nc.cae,
+              caeVencimiento: nc.caeVencimiento,
+              fechaEmision: nc.fechaEmision,
+              importeTotal: nc.importeTotal,
+              status: nc.status,
+              motivoNc: nc.motivoNc,
+              createdAt: nc.createdAt,
+              isNotaCredito: true
+            });
+          }
+          
+          // Update billing status if last item is a credit note
+          if (invoiceHistory.length > 0) {
+            const lastItem = invoiceHistory[invoiceHistory.length - 1];
+            billingStatus = lastItem.isNotaCredito ? 'credit_note' : 'invoiced';
+          }
         }
       }
+    } catch (invoiceError) {
+      console.error('Error fetching invoice history for order', id, ':', invoiceError);
     }
 
     const order = {
