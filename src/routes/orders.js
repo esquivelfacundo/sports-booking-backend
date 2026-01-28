@@ -197,20 +197,25 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         }
       }
 
-      // Get billing status from invoices
-      const orderInvoices = await Invoice.findAll({
-        where: { order_id: order.id },
-        attributes: ['id', ['tipo_comprobante', 'tipoComprobante'], 'createdAt'],
-        order: [['created_at', 'ASC']],
-        raw: true
-      });
-      
-      const lastInvoice = orderInvoices[orderInvoices.length - 1];
-      const tipoComprobante = lastInvoice?.tipoComprobante || lastInvoice?.tipo_comprobante;
-      const isLastNC = lastInvoice && [3, 8, 13].includes(tipoComprobante);
-      const billingStatus = lastInvoice 
-        ? (isLastNC ? 'credit_note' : 'invoiced')
-        : null;
+      // Get billing status from invoices (with fallback)
+      let billingStatus = null;
+      try {
+        const orderInvoices = await Invoice.findAll({
+          where: { orderId: order.id },
+          attributes: ['id', 'tipoComprobante', 'createdAt'],
+          order: [['createdAt', 'ASC']]
+        });
+        
+        if (orderInvoices.length > 0) {
+          const lastInvoice = orderInvoices[orderInvoices.length - 1];
+          const tipoComprobante = lastInvoice.tipoComprobante;
+          const isLastNC = [3, 8, 13].includes(tipoComprobante);
+          billingStatus = isLastNC ? 'credit_note' : 'invoiced';
+        }
+      } catch (invErr) {
+        console.error('Error fetching invoices for order:', order.id, invErr.message);
+        // billingStatus stays null
+      }
 
       return {
         ...order,
