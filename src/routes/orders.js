@@ -200,7 +200,6 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       // Get billing status - check if order has invoiceId
       let billingStatus = null;
       const orderInvoiceId = order.invoiceId || order.invoice_id;
-      console.log(`Order ${order.id} - invoiceId: ${order.invoiceId}, invoice_id: ${order.invoice_id}, resolved: ${orderInvoiceId}`);
       if (orderInvoiceId) {
         try {
           // Get invoice and any credit notes referencing it
@@ -212,8 +211,8 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
             // Check if there are credit notes for this invoice
             const creditNotes = await Invoice.findAll({
               where: { comprobanteAsociadoId: orderInvoiceId },
-              attributes: ['id', 'tipoComprobante', 'createdAt'],
-              order: [['createdAt', 'DESC']],
+              attributes: ['id', 'tipoComprobante'],
+              order: [['created_at', 'DESC']],
               limit: 1
             });
             
@@ -555,7 +554,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
           attributes: [
             'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
             'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-            'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'createdAt'
+            'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'created_at'
           ]
         });
         
@@ -571,7 +570,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
             fechaEmision: mainInvoice.fechaEmision,
             importeTotal: mainInvoice.importeTotal,
             status: mainInvoice.status,
-            createdAt: mainInvoice.createdAt,
+            createdAt: mainInvoice.created_at,
             isNotaCredito: false
           };
           
@@ -585,9 +584,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
             attributes: [
               'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
               'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-              'importeTotal', 'status', 'motivoNc', 'createdAt'
+              'importeTotal', 'status', 'motivoNc'
             ],
-            order: [['createdAt', 'ASC']]
+            order: [['created_at', 'ASC']]
           });
           
           for (const nc of creditNotes) {
@@ -603,7 +602,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
               importeTotal: nc.importeTotal,
               status: nc.status,
               motivoNc: nc.motivoNc,
-              createdAt: nc.createdAt,
               isNotaCredito: true
             });
           }
