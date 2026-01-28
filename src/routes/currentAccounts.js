@@ -16,8 +16,11 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       where.accountType = accountType;
     }
     
-    if (isActive !== undefined) {
-      where.isActive = isActive === 'true';
+    // Default to showing only active accounts unless explicitly requesting inactive
+    if (isActive === undefined || isActive === 'true') {
+      where.isActive = true;
+    } else if (isActive === 'false') {
+      where.isActive = false;
     }
 
     if (search) {
