@@ -200,13 +200,14 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       // Get billing status from invoices
       const orderInvoices = await Invoice.findAll({
         where: { orderId: order.id },
-        attributes: ['id', 'tipoComprobante', 'createdAt'],
+        attributes: ['id', ['tipo_comprobante', 'tipoComprobante'], 'createdAt'],
         order: [['created_at', 'ASC']],
         raw: true
       });
       
       const lastInvoice = orderInvoices[orderInvoices.length - 1];
-      const isLastNC = lastInvoice && [3, 8, 13].includes(lastInvoice.tipoComprobante || lastInvoice.tipo_comprobante);
+      const tipoComprobante = lastInvoice?.tipoComprobante || lastInvoice?.tipo_comprobante;
+      const isLastNC = lastInvoice && [3, 8, 13].includes(tipoComprobante);
       const billingStatus = lastInvoice 
         ? (isLastNC ? 'credit_note' : 'invoiced')
         : null;
