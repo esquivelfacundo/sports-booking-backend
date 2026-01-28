@@ -72,7 +72,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       movements = await CurrentAccountMovement.findAll({
         where: { currentAccountId: id },
         limit: parseInt(movementsLimit),
-        order: [['created_at', 'DESC']],
+        order: [['createdAt', 'DESC']],
         include: [
           { model: Order, as: 'order', attributes: ['id', 'orderNumber'] },
           { model: User, as: 'registeredByUser', attributes: ['id', 'firstName', 'lastName', 'email'] }
