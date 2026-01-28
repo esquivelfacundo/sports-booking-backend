@@ -197,24 +197,34 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         }
       }
 
-      // Get billing status from invoices (with fallback)
+      // Get billing status - check if order has invoiceId
       let billingStatus = null;
-      try {
-        const orderInvoices = await Invoice.findAll({
-          where: { orderId: order.id },
-          attributes: ['id', 'tipoComprobante', 'createdAt'],
-          order: [['createdAt', 'ASC']]
-        });
-        
-        if (orderInvoices.length > 0) {
-          const lastInvoice = orderInvoices[orderInvoices.length - 1];
-          const tipoComprobante = lastInvoice.tipoComprobante;
-          const isLastNC = [3, 8, 13].includes(tipoComprobante);
-          billingStatus = isLastNC ? 'credit_note' : 'invoiced';
+      const orderInvoiceId = order.invoiceId || order.invoice_id;
+      if (orderInvoiceId) {
+        try {
+          // Get invoice and any credit notes referencing it
+          const invoice = await Invoice.findByPk(orderInvoiceId, {
+            attributes: ['id', 'tipoComprobante', 'status']
+          });
+          
+          if (invoice) {
+            // Check if there are credit notes for this invoice
+            const creditNotes = await Invoice.findAll({
+              where: { comprobanteAsociadoId: orderInvoiceId },
+              attributes: ['id', 'tipoComprobante', 'createdAt'],
+              order: [['createdAt', 'DESC']],
+              limit: 1
+            });
+            
+            if (creditNotes.length > 0) {
+              billingStatus = 'credit_note';
+            } else {
+              billingStatus = 'invoiced';
+            }
+          }
+        } catch (invErr) {
+          console.error('Error fetching invoice for order:', order.id, invErr.message);
         }
-      } catch (invErr) {
-        console.error('Error fetching invoices for order:', order.id, invErr.message);
-        // billingStatus stays null
       }
 
       return {
@@ -528,45 +538,78 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Get ALL invoices for this order (facturas + notas de crédito)
-    const allInvoicesRaw = await Invoice.findAll({
-      where: { orderId: id },
-      attributes: [
-        'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
-        'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-        'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'createdAt'
-      ],
-      order: [['created_at', 'ASC']],
-      raw: true
-    });
-
-    // Map to camelCase and build invoice history
-    const invoiceHistory = allInvoicesRaw.map(inv => ({
-      id: inv.id,
-      tipoComprobante: inv.tipoComprobante || inv.tipo_comprobante,
-      tipoComprobanteNombre: inv.tipoComprobanteNombre || inv.tipo_comprobante_nombre,
-      puntoVenta: inv.puntoVenta || inv.punto_venta,
-      numeroComprobante: inv.numeroComprobante || inv.numero_comprobante,
-      cae: inv.cae,
-      caeVencimiento: inv.caeVencimiento || inv.cae_vencimiento,
-      fechaEmision: inv.fechaEmision || inv.fecha_emision,
-      importeTotal: inv.importeTotal || inv.importe_total,
-      status: inv.status,
-      comprobanteAsociadoId: inv.comprobanteAsociadoId || inv.comprobante_asociado_id,
-      motivoNc: inv.motivoNc || inv.motivo_nc,
-      createdAt: inv.createdAt || inv.created_at,
-      isNotaCredito: [3, 8, 13].includes(inv.tipoComprobante || inv.tipo_comprobante)
-    }));
-
-    // Legacy: keep invoice field for backwards compatibility (last factura, not NC)
-    const lastFactura = invoiceHistory.filter(i => !i.isNotaCredito).pop();
-    const invoice = lastFactura || null;
-
-    // Determine billing status: 'invoiced' | 'credit_note' | null
-    const lastInvoiceEvent = invoiceHistory[invoiceHistory.length - 1];
-    const billingStatus = lastInvoiceEvent 
-      ? (lastInvoiceEvent.isNotaCredito ? 'credit_note' : 'invoiced')
-      : null;
+    // Get invoice history using order.invoiceId
+    let invoiceHistory = [];
+    let invoice = null;
+    let billingStatus = null;
+    
+    const orderInvoiceId = orderRaw.invoiceId || orderRaw.invoice_id;
+    if (orderInvoiceId) {
+      // Get the main invoice
+      const mainInvoice = await Invoice.findByPk(orderInvoiceId, {
+        attributes: [
+          'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
+          'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
+          'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'createdAt'
+        ]
+      });
+      
+      if (mainInvoice) {
+        const mainInvoiceData = {
+          id: mainInvoice.id,
+          tipoComprobante: mainInvoice.tipoComprobante,
+          tipoComprobanteNombre: mainInvoice.tipoComprobanteNombre,
+          puntoVenta: mainInvoice.puntoVenta,
+          numeroComprobante: mainInvoice.numeroComprobante,
+          cae: mainInvoice.cae,
+          caeVencimiento: mainInvoice.caeVencimiento,
+          fechaEmision: mainInvoice.fechaEmision,
+          importeTotal: mainInvoice.importeTotal,
+          status: mainInvoice.status,
+          createdAt: mainInvoice.createdAt,
+          isNotaCredito: false
+        };
+        
+        invoiceHistory.push(mainInvoiceData);
+        invoice = mainInvoiceData;
+        billingStatus = 'invoiced';
+        
+        // Get any credit notes referencing this invoice
+        const creditNotes = await Invoice.findAll({
+          where: { comprobanteAsociadoId: orderInvoiceId },
+          attributes: [
+            'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
+            'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
+            'importeTotal', 'status', 'motivoNc', 'createdAt'
+          ],
+          order: [['createdAt', 'ASC']]
+        });
+        
+        for (const nc of creditNotes) {
+          invoiceHistory.push({
+            id: nc.id,
+            tipoComprobante: nc.tipoComprobante,
+            tipoComprobanteNombre: nc.tipoComprobanteNombre,
+            puntoVenta: nc.puntoVenta,
+            numeroComprobante: nc.numeroComprobante,
+            cae: nc.cae,
+            caeVencimiento: nc.caeVencimiento,
+            fechaEmision: nc.fechaEmision,
+            importeTotal: nc.importeTotal,
+            status: nc.status,
+            motivoNc: nc.motivoNc,
+            createdAt: nc.createdAt,
+            isNotaCredito: true
+          });
+        }
+        
+        // Update billing status if last item is a credit note
+        if (invoiceHistory.length > 0) {
+          const lastItem = invoiceHistory[invoiceHistory.length - 1];
+          billingStatus = lastItem.isNotaCredito ? 'credit_note' : 'invoiced';
+        }
+      }
+    }
 
     const order = {
       ...orderRaw,
