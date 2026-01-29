@@ -102,15 +102,7 @@ const getFinancialSummary = async (req, res) => {
 
     // Calculate deposits/advances (only from bookings)
     const totalDeposits = currentBookings.reduce((sum, b) => sum + parseFloat(b.depositAmount || 0), 0);
-    
-    // Calculate pending balance correctly: sum of individual pending amounts (totalAmount - depositAmount) where there IS pending
-    // This avoids negative values and is more accurate
-    const pendingBalance = currentBookings.reduce((sum, b) => {
-      const total = parseFloat(b.totalAmount || 0);
-      const deposit = parseFloat(b.depositAmount || 0);
-      const pending = total - deposit;
-      return sum + (pending > 0 ? pending : 0); // Only add positive pending amounts
-    }, 0);
+    const pendingBalance = bookingRevenue - totalDeposits;
 
     // Calculate invoiced vs non-invoiced amounts
     // A sale is "invoiced" if it has an invoice that is NOT cancelled (status != 'anulado' and anuladoPorId is null)
