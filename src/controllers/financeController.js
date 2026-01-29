@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, Payment } = require('../models');
+const { Booking, Court, Establishment, Payment, Order, Invoice } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 
 /**
@@ -42,14 +42,29 @@ const getFinancialSummary = async (req, res) => {
     const previousStartStr = previousStart.toISOString().split('T')[0];
     const previousEndStr = previousEnd.toISOString().split('T')[0];
 
-    // Get current period bookings (revenue)
+    // Get current period bookings (revenue from reservations)
     const currentBookings = await Booking.findAll({
       where: {
         establishmentId,
         date: { [Op.between]: [startStr, endStr] },
         status: { [Op.in]: ['confirmed', 'completed'] }
       },
-      include: [{ model: Court, as: 'court', attributes: ['id', 'name'] }]
+      include: [
+        { model: Court, as: 'court', attributes: ['id', 'name'] },
+        { model: Invoice, as: 'invoice', attributes: ['id', 'status', 'anuladoPorId', 'tipoComprobante', 'importeTotal'] }
+      ]
+    });
+
+    // Get current period orders (direct sales + kiosk/product sales)
+    const currentOrders = await Order.findAll({
+      where: {
+        establishmentId,
+        createdAt: { [Op.between]: [start, now] },
+        status: { [Op.in]: ['completed', 'pending'] }
+      },
+      include: [
+        { model: Invoice, as: 'invoice', attributes: ['id', 'status', 'anuladoPorId', 'tipoComprobante', 'importeTotal'] }
+      ]
     });
 
     // Get previous period bookings for comparison
@@ -61,14 +76,58 @@ const getFinancialSummary = async (req, res) => {
       }
     });
 
-    // Calculate revenue
-    const totalRevenue = currentBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
-    const previousRevenue = previousBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
+    // Get previous period orders for comparison
+    const previousOrders = await Order.findAll({
+      where: {
+        establishmentId,
+        createdAt: { [Op.between]: [previousStart, previousEnd] },
+        status: { [Op.in]: ['completed', 'pending'] }
+      }
+    });
+
+    // Calculate booking revenue
+    const bookingRevenue = currentBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
+    
+    // Calculate order revenue (kiosk/product sales)
+    const orderRevenue = currentOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+    
+    // Total revenue = bookings + orders
+    const totalRevenue = bookingRevenue + orderRevenue;
+    
+    // Previous period totals
+    const previousBookingRevenue = previousBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
+    const previousOrderRevenue = previousOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+    const previousRevenue = previousBookingRevenue + previousOrderRevenue;
     const revenueGrowth = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
-    // Calculate deposits/advances
+    // Calculate deposits/advances (only from bookings)
     const totalDeposits = currentBookings.reduce((sum, b) => sum + parseFloat(b.depositAmount || 0), 0);
-    const pendingBalance = totalRevenue - totalDeposits;
+    const pendingBalance = bookingRevenue - totalDeposits;
+
+    // Calculate invoiced vs non-invoiced amounts
+    // A sale is "invoiced" if it has an invoice that is NOT cancelled (status != 'anulado' and anuladoPorId is null)
+    let totalInvoiced = 0;
+    let totalNotInvoiced = 0;
+
+    // Check bookings
+    for (const booking of currentBookings) {
+      const amount = parseFloat(booking.totalAmount || 0);
+      if (booking.invoice && booking.invoice.status === 'emitido' && !booking.invoice.anuladoPorId) {
+        totalInvoiced += amount;
+      } else {
+        totalNotInvoiced += amount;
+      }
+    }
+
+    // Check orders
+    for (const order of currentOrders) {
+      const amount = parseFloat(order.total || 0);
+      if (order.invoice && order.invoice.status === 'emitido' && !order.invoice.anuladoPorId) {
+        totalInvoiced += amount;
+      } else {
+        totalNotInvoiced += amount;
+      }
+    }
 
     // Pending payments (pending bookings)
     const pendingBookings = await Booking.findAll({
@@ -185,11 +244,16 @@ const getFinancialSummary = async (req, res) => {
       },
       summary: {
         totalRevenue,
+        bookingRevenue,
+        orderRevenue,
         totalDeposits,
         pendingBalance,
         pendingPayments,
+        totalInvoiced,
+        totalNotInvoiced,
         totalBookings: currentBookings.length,
-        averageTicket: currentBookings.length > 0 ? totalRevenue / currentBookings.length : 0,
+        totalOrders: currentOrders.length,
+        averageTicket: currentBookings.length > 0 ? bookingRevenue / currentBookings.length : 0,
         growth: {
           revenue: Math.round(revenueGrowth * 10) / 10,
           trend: revenueGrowth > 0 ? 'up' : revenueGrowth < 0 ? 'down' : 'stable'
