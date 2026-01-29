@@ -43,13 +43,11 @@ const getFinancialSummary = async (req, res) => {
     const previousEndStr = previousEnd.toISOString().split('T')[0];
 
     // Get current period bookings (revenue from reservations)
-    // Include no_show because their deposits count as revenue (player already paid the deposit)
-    // Exclude cancelled because the whole booking is cancelled
     const currentBookings = await Booking.findAll({
       where: {
         establishmentId,
         date: { [Op.between]: [startStr, endStr] },
-        status: { [Op.in]: ['confirmed', 'completed', 'no_show'] }
+        status: { [Op.in]: ['confirmed', 'completed'] }
       },
       include: [
         { model: Court, as: 'court', attributes: ['id', 'name'] },
@@ -88,14 +86,7 @@ const getFinancialSummary = async (req, res) => {
     });
 
     // Calculate booking revenue
-    // For no_show: only count the deposit as revenue (player won't pay the rest)
-    // For confirmed/completed: count the full totalAmount
-    const bookingRevenue = currentBookings.reduce((sum, b) => {
-      if (b.status === 'no_show') {
-        return sum + parseFloat(b.depositAmount || 0); // Only deposit counts as revenue
-      }
-      return sum + parseFloat(b.totalAmount || 0);
-    }, 0);
+    const bookingRevenue = currentBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
     
     // Calculate order revenue (kiosk/product sales)
     const orderRevenue = currentOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
@@ -109,16 +100,12 @@ const getFinancialSummary = async (req, res) => {
     const previousRevenue = previousBookingRevenue + previousOrderRevenue;
     const revenueGrowth = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
-    // Calculate deposits/advances (only from bookings - includes no_show deposits)
+    // Calculate deposits/advances (only from bookings)
     const totalDeposits = currentBookings.reduce((sum, b) => sum + parseFloat(b.depositAmount || 0), 0);
     
-    // Calculate pending balance: sum of individual pending amounts where there IS pending
-    // EXCLUDE no_show and cancelled - these won't be collected
-    // Only count confirmed/completed bookings with actual pending balance
+    // Calculate pending balance correctly: sum of individual pending amounts (totalAmount - depositAmount) where there IS pending
+    // This avoids negative values and is more accurate
     const pendingBalance = currentBookings.reduce((sum, b) => {
-      // Skip no_show - pending amount won't be collected
-      if (b.status === 'no_show') return sum;
-      
       const total = parseFloat(b.totalAmount || 0);
       const deposit = parseFloat(b.depositAmount || 0);
       const pending = total - deposit;
@@ -132,11 +119,7 @@ const getFinancialSummary = async (req, res) => {
 
     // Check bookings
     for (const booking of currentBookings) {
-      // For no_show, only the deposit is revenue
-      const amount = booking.status === 'no_show' 
-        ? parseFloat(booking.depositAmount || 0)
-        : parseFloat(booking.totalAmount || 0);
-      
+      const amount = parseFloat(booking.totalAmount || 0);
       if (booking.invoice && booking.invoice.status === 'emitido' && !booking.invoice.anuladoPorId) {
         totalInvoiced += amount;
       } else {
