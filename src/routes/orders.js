@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Order, OrderItem, OrderPayment, Product, Establishment, Booking, Client, User, StockMovement, BookingConsumption, CurrentAccount, CurrentAccountMovement, Invoice } = require('../models');
+const { Order, OrderItem, OrderPayment, Product, Establishment, Booking, Client, User, StockMovement, BookingConsumption, CurrentAccount, CurrentAccountMovement, Invoice, BookingPayment } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
@@ -1148,8 +1148,42 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
     const completedOrders = await Order.count({ where: { ...where, status: 'completed' } });
     const paidOrders = await Order.count({ where: { ...where, paymentStatus: 'paid' } });
     
-    const totalRevenue = await Order.sum('total', { where: { ...where, status: 'completed' } }) || 0;
-    const totalPaid = await Order.sum('paidAmount', { where: { ...where, status: 'completed' } }) || 0;
+    // Get all orders to calculate real totals including booking payments
+    const allOrders = await Order.findAll({
+      where,
+      include: [{ model: Booking, as: 'booking' }],
+      raw: true,
+      nest: true
+    });
+    
+    let totalRevenue = 0;
+    let totalPaid = 0;
+    
+    for (const order of allOrders) {
+      // Skip cancelled orders
+      if (order.status === 'cancelled') continue;
+      
+      totalRevenue += parseFloat(order.total) || 0;
+      
+      // For booking_consumption orders, include booking payments
+      if (order.orderType === 'booking_consumption' && order.bookingId) {
+        // Get booking payments
+        const bpList = await BookingPayment.findAll({ 
+          where: { bookingId: order.bookingId }, 
+          raw: true 
+        });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        
+        // Get seña (initial deposit)
+        const booking = await Booking.findByPk(order.bookingId);
+        const seña = booking ? (parseFloat(booking.initialDeposit) || 0) : 0;
+        
+        totalPaid += seña + bpTotal;
+      } else {
+        // For direct sales, use paidAmount
+        totalPaid += parseFloat(order.paidAmount) || 0;
+      }
+    }
     
     const directSales = await Order.count({ where: { ...where, orderType: 'direct_sale' } });
     const bookingConsumptions = await Order.count({ where: { ...where, orderType: 'booking_consumption' } });
@@ -1162,7 +1196,7 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         pendingPayment: totalOrders - paidOrders,
         totalRevenue,
         totalPaid,
-        pendingAmount: totalRevenue - totalPaid,
+        pendingAmount: Math.max(0, totalRevenue - totalPaid),
         directSales,
         bookingConsumptions
       }
