@@ -930,7 +930,7 @@ const getEstablishmentBookings = async (req, res) => {
     const { count, rows: bookings } = await Booking.findAndCountAll({
       where,
       attributes: { 
-        include: ['establishmentId', 'amenityId'] // Ensure establishmentId and amenityId are included
+        include: ['establishmentId', 'amenityId', 'reviewToken'] // Ensure these fields are included
       },
       include: [
         {
