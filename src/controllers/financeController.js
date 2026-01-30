@@ -334,12 +334,16 @@ const getFinancialSummary = async (req, res) => {
       const dateStr = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-${String(createdDate.getDate()).padStart(2, '0')}`;
       const timeStr = `${String(createdDate.getHours()).padStart(2, '0')}:${String(createdDate.getMinutes()).padStart(2, '0')}:${String(createdDate.getSeconds()).padStart(2, '0')}`;
       
+      // Get amount - use dataValues to ensure we get the raw value
+      const orderTotal = parseFloat(o.dataValues?.total || o.total || 0);
+      const isConsumption = o.orderType === 'booking_consumption' || o.orderType === 'reservation_consumption';
+      
       return {
         id: o.id,
         type: 'order',
-        category: o.orderType === 'booking_consumption' ? 'Consumo en reserva' : 'Venta directa',
-        description: o.orderType === 'booking_consumption' ? `Consumo - ${o.customerName || o.client?.name || 'Cliente'}` : `Venta - ${o.customerName || o.client?.name || 'Cliente'}`,
-        amount: parseFloat(o.total || 0),
+        category: isConsumption ? 'Consumo en reserva' : 'Venta directa',
+        description: isConsumption ? `Consumo - ${o.customerName || o.client?.name || 'Cliente'}` : `Venta - ${o.customerName || o.client?.name || 'Cliente'}`,
+        amount: orderTotal,
         depositAmount: 0,
         date: dateStr,
         time: timeStr,
@@ -348,7 +352,7 @@ const getFinancialSummary = async (req, res) => {
         reference: o.orderNumber,
         clientName: o.customerName || o.client?.name || 'Cliente',
         clientPhone: o.customerPhone || o.client?.phone || '',
-        court: o.orderType === 'booking_consumption' ? 'Consumo' : 'Venta Directa',
+        court: isConsumption ? 'Consumo' : 'Venta Directa',
         sortDate: createdDate
       };
     }).sort((a, b) => b.sortDate - a.sortDate).map(({ sortDate, ...tx }) => tx);
