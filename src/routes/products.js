@@ -9,7 +9,7 @@ const { sequelize } = require('../config/database');
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { establishmentId } = req.query;
-    const { categoryId, search, isActive } = req.query;
+    const { categoryId, search, isActive, page, limit } = req.query;
 
     if (!establishmentId) {
       return res.status(400).json({ error: 'establishmentId is required' });
@@ -43,7 +43,12 @@ router.get('/', authenticateToken, async (req, res) => {
       where.isActive = isActive === 'true';
     }
 
-    const products = await Product.findAll({
+    // Pagination
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 50;
+    const offset = (pageNum - 1) * limitNum;
+
+    const { count, rows: products } = await Product.findAndCountAll({
       where,
       include: [
         {
@@ -52,10 +57,20 @@ router.get('/', authenticateToken, async (req, res) => {
           attributes: ['id', 'name', 'color', 'icon']
         }
       ],
-      order: [['name', 'ASC']]
+      order: [['name', 'ASC']],
+      limit: limitNum,
+      offset
     });
 
-    res.json({ products });
+    res.json({ 
+      products,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: count,
+        totalPages: Math.ceil(count / limitNum)
+      }
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     res.status(500).json({ error: 'Failed to fetch products' });
