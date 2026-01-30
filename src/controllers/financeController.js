@@ -13,17 +13,29 @@ const getFinancialSummary = async (req, res) => {
     const now = new Date();
     let start, end, previousStart, previousEnd;
     
-    if (period === 'custom' && startDate && endDate) {
-      // Custom date range - use strings directly for date comparison
-      // Create Date objects with UTC to avoid timezone issues
-      start = new Date(startDate + 'T00:00:00Z');
-      end = new Date(endDate + 'T23:59:59Z');
+    if (period === 'custom' && startDate) {
+      // Custom date range - use date strings directly to avoid ALL timezone issues
+      // If only startDate is provided, use today as endDate
+      const todayStr = now.toISOString().split('T')[0];
+      const effectiveEndDate = endDate || todayStr;
+      
+      // Store strings directly - these will be used for DB queries and chart generation
+      const customStartStr = startDate;
+      const customEndStr = effectiveEndDate;
+      
+      // Create Date objects only for calculating previous period (not for DB queries)
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      const [ey, em, ed] = effectiveEndDate.split('-').map(Number);
+      start = new Date(sy, sm - 1, sd);
+      end = new Date(ey, em - 1, ed);
+      
       const rangeDays = Math.ceil((end - start) / (24 * 60 * 60 * 1000)) + 1;
       previousStart = new Date(start.getTime() - rangeDays * 24 * 60 * 60 * 1000);
       previousEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
-      // Store original strings for direct comparison with booking dates
-      start.dateStr = startDate;
-      end.dateStr = endDate;
+      
+      // Store original strings for direct use (avoids any timezone conversion)
+      start.dateStr = customStartStr;
+      end.dateStr = customEndStr;
     } else {
       end = now;
       switch (period) {
@@ -512,10 +524,14 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
     const now = new Date();
     let start, end;
     
-    if (period === 'custom' && startDate && endDate) {
-      // Use UTC to avoid timezone issues
-      start = new Date(startDate + 'T00:00:00Z');
-      end = new Date(endDate + 'T23:59:59Z');
+    if (period === 'custom' && startDate) {
+      // Use local date parsing to avoid timezone issues
+      const todayStr = now.toISOString().split('T')[0];
+      const effectiveEndDate = endDate || todayStr;
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      const [ey, em, ed] = effectiveEndDate.split('-').map(Number);
+      start = new Date(sy, sm - 1, sd);
+      end = new Date(ey, em - 1, ed);
     } else {
       end = now;
       switch (period) {
