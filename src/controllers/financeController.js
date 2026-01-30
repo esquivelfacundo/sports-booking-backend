@@ -196,20 +196,31 @@ const getFinancialSummary = async (req, res) => {
     const useWeeklyGrouping = period === 'quarter' || period === 'year';
     const revenueByPeriod = {};
     
-    // Helper to get week key (start of week date)
+    // Helper to get week key (start of week date) - uses local time formatting
     const getWeekKey = (date) => {
       const d = new Date(date);
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday as start of week
       d.setDate(diff);
-      return d.toISOString().split('T')[0];
+      // Format manually to avoid timezone issues
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const dayNum = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${dayNum}`;
     };
     
-    // Initialize all periods with zero values
-    const currentDate = new Date(start);
+    // Initialize all periods with zero values using date strings to avoid timezone issues
+    // Parse startStr and endStr as local dates for iteration
+    const [startYear, startMonth, startDay] = startStr.split('-').map(Number);
+    const [endYear, endMonth, endDay] = endStr.split('-').map(Number);
+    
+    // Create dates using local timezone (not UTC)
+    let currentDate = new Date(startYear, startMonth - 1, startDay);
+    const endDateLocal = new Date(endYear, endMonth - 1, endDay);
+    
     if (useWeeklyGrouping) {
       // Initialize weeks
-      while (currentDate <= end) {
+      while (currentDate <= endDateLocal) {
         const weekKey = getWeekKey(currentDate);
         if (!revenueByPeriod[weekKey]) {
           revenueByPeriod[weekKey] = { 
@@ -224,8 +235,13 @@ const getFinancialSummary = async (req, res) => {
       }
     } else {
       // Initialize days
-      while (currentDate <= end) {
-        const dateStr = currentDate.toISOString().split('T')[0];
+      while (currentDate <= endDateLocal) {
+        // Format as YYYY-MM-DD manually to avoid timezone issues
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        
         revenueByPeriod[dateStr] = { 
           revenue: 0, 
           deposits: 0, 
