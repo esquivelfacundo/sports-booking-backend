@@ -177,61 +177,91 @@ const getFinancialSummary = async (req, res) => {
       };
     }
 
-    // Revenue by day (includes bookings and orders) - Generate ALL days in period
-    const revenueByDay = {};
+    // Revenue by period (daily for week/month, weekly for quarter/year)
+    const useWeeklyGrouping = period === 'quarter' || period === 'year';
+    const revenueByPeriod = {};
     
-    // Initialize all days in the period with zero values
+    // Helper to get week key (start of week date)
+    const getWeekKey = (date) => {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday as start of week
+      d.setDate(diff);
+      return d.toISOString().split('T')[0];
+    };
+    
+    // Initialize all periods with zero values
     const currentDate = new Date(start);
-    while (currentDate <= now) {
-      const dateStr = currentDate.toISOString().split('T')[0];
-      revenueByDay[dateStr] = { 
-        revenue: 0, 
-        deposits: 0, 
-        bookings: 0, 
-        orders: 0,
-        byPaymentMethod: {}
-      };
-      currentDate.setDate(currentDate.getDate() + 1);
+    if (useWeeklyGrouping) {
+      // Initialize weeks
+      while (currentDate <= now) {
+        const weekKey = getWeekKey(currentDate);
+        if (!revenueByPeriod[weekKey]) {
+          revenueByPeriod[weekKey] = { 
+            revenue: 0, 
+            deposits: 0, 
+            bookings: 0, 
+            orders: 0,
+            byPaymentMethod: {}
+          };
+        }
+        currentDate.setDate(currentDate.getDate() + 7);
+      }
+    } else {
+      // Initialize days
+      while (currentDate <= now) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        revenueByPeriod[dateStr] = { 
+          revenue: 0, 
+          deposits: 0, 
+          bookings: 0, 
+          orders: 0,
+          byPaymentMethod: {}
+        };
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
     }
     
     // Add bookings data
     currentBookings.forEach(b => {
-      if (revenueByDay[b.date]) {
+      const key = useWeeklyGrouping ? getWeekKey(b.date) : b.date;
+      if (revenueByPeriod[key]) {
         const amount = parseFloat(b.totalAmount || 0);
-        revenueByDay[b.date].revenue += amount;
-        revenueByDay[b.date].deposits += parseFloat(b.depositAmount || 0);
-        revenueByDay[b.date].bookings += 1;
+        revenueByPeriod[key].revenue += amount;
+        revenueByPeriod[key].deposits += parseFloat(b.depositAmount || 0);
+        revenueByPeriod[key].bookings += 1;
         
         // Track by payment method
         const method = b.depositMethod || 'sin_especificar';
         const methodLabel = getPaymentMethodLabel(method);
-        if (!revenueByDay[b.date].byPaymentMethod[methodLabel]) {
-          revenueByDay[b.date].byPaymentMethod[methodLabel] = 0;
+        if (!revenueByPeriod[key].byPaymentMethod[methodLabel]) {
+          revenueByPeriod[key].byPaymentMethod[methodLabel] = 0;
         }
-        revenueByDay[b.date].byPaymentMethod[methodLabel] += amount;
+        revenueByPeriod[key].byPaymentMethod[methodLabel] += amount;
       }
     });
     
-    // Add orders to daily revenue
+    // Add orders to revenue
     currentOrders.forEach(o => {
       const orderDate = o.createdAt.toISOString().split('T')[0];
-      if (revenueByDay[orderDate]) {
+      const key = useWeeklyGrouping ? getWeekKey(orderDate) : orderDate;
+      if (revenueByPeriod[key]) {
         const amount = parseFloat(o.total || 0);
-        revenueByDay[orderDate].revenue += amount;
-        revenueByDay[orderDate].orders += 1;
+        revenueByPeriod[key].revenue += amount;
+        revenueByPeriod[key].orders += 1;
         
         // Track by payment method
         const method = o.paymentMethod || 'sin_especificar';
         const methodLabel = getPaymentMethodLabel(method);
-        if (!revenueByDay[orderDate].byPaymentMethod[methodLabel]) {
-          revenueByDay[orderDate].byPaymentMethod[methodLabel] = 0;
+        if (!revenueByPeriod[key].byPaymentMethod[methodLabel]) {
+          revenueByPeriod[key].byPaymentMethod[methodLabel] = 0;
         }
-        revenueByDay[orderDate].byPaymentMethod[methodLabel] += amount;
+        revenueByPeriod[key].byPaymentMethod[methodLabel] += amount;
       }
     });
 
-    const dailyRevenue = Object.entries(revenueByDay)
-      .map(([date, data]) => ({ date, ...data }))
+    const dailyRevenue = Object.entries(revenueByPeriod)
+      .map(([date, data]) => ({ date, ...data, isWeekly: useWeeklyGrouping }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Revenue by booking type (includes orders as "Venta Directa")
