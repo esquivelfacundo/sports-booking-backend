@@ -139,7 +139,7 @@ const getFinancialSummary = async (req, res) => {
     });
     const pendingPayments = pendingBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
 
-    // Revenue by payment method
+    // Revenue by payment method (includes bookings and orders)
     const paymentMethods = {};
     currentBookings.forEach(b => {
       const method = b.depositMethod || 'sin_especificar';
@@ -149,8 +149,17 @@ const getFinancialSummary = async (req, res) => {
       paymentMethods[method].count += 1;
       paymentMethods[method].amount += parseFloat(b.totalAmount || 0);
     });
+    // Add orders to payment methods
+    currentOrders.forEach(o => {
+      const method = o.paymentMethod || 'sin_especificar';
+      if (!paymentMethods[method]) {
+        paymentMethods[method] = { count: 0, amount: 0 };
+      }
+      paymentMethods[method].count += 1;
+      paymentMethods[method].amount += parseFloat(o.total || 0);
+    });
 
-    // Revenue by court
+    // Revenue by court (bookings only - orders don't have courts)
     const revenueByCourt = {};
     currentBookings.forEach(b => {
       const courtName = b.court?.name || 'Sin cancha';
@@ -160,23 +169,39 @@ const getFinancialSummary = async (req, res) => {
       revenueByCourt[courtName].count += 1;
       revenueByCourt[courtName].amount += parseFloat(b.totalAmount || 0);
     });
+    // Add orders as "Kiosco/Ventas" category
+    if (currentOrders.length > 0) {
+      revenueByCourt['Kiosco/Ventas'] = {
+        count: currentOrders.length,
+        amount: orderRevenue
+      };
+    }
 
-    // Revenue by day
+    // Revenue by day (includes bookings and orders)
     const revenueByDay = {};
     currentBookings.forEach(b => {
       if (!revenueByDay[b.date]) {
-        revenueByDay[b.date] = { revenue: 0, deposits: 0, bookings: 0 };
+        revenueByDay[b.date] = { revenue: 0, deposits: 0, bookings: 0, orders: 0 };
       }
       revenueByDay[b.date].revenue += parseFloat(b.totalAmount || 0);
       revenueByDay[b.date].deposits += parseFloat(b.depositAmount || 0);
       revenueByDay[b.date].bookings += 1;
+    });
+    // Add orders to daily revenue
+    currentOrders.forEach(o => {
+      const orderDate = o.createdAt.toISOString().split('T')[0];
+      if (!revenueByDay[orderDate]) {
+        revenueByDay[orderDate] = { revenue: 0, deposits: 0, bookings: 0, orders: 0 };
+      }
+      revenueByDay[orderDate].revenue += parseFloat(o.total || 0);
+      revenueByDay[orderDate].orders += 1;
     });
 
     const dailyRevenue = Object.entries(revenueByDay)
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Revenue by booking type
+    // Revenue by booking type (includes orders as "Venta Directa")
     const revenueByType = {};
     currentBookings.forEach(b => {
       const type = b.bookingType || 'normal';
@@ -186,6 +211,13 @@ const getFinancialSummary = async (req, res) => {
       revenueByType[type].count += 1;
       revenueByType[type].amount += parseFloat(b.totalAmount || 0);
     });
+    // Add orders as "Venta Directa" type
+    if (currentOrders.length > 0) {
+      revenueByType['venta_directa'] = {
+        count: currentOrders.length,
+        amount: orderRevenue
+      };
+    }
 
     // Recent transactions (bookings as income)
     const recentTransactions = currentBookings
@@ -310,7 +342,8 @@ const getBookingTypeLabel = (type) => {
     'torneo': 'Torneo',
     'escuela': 'Escuela',
     'cumpleanos': 'Cumpleaños',
-    'abonado': 'Abonado'
+    'abonado': 'Abonado',
+    'venta_directa': 'Venta Directa'
   };
   return labels[type] || type;
 };
