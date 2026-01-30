@@ -327,9 +327,13 @@ const getFinancialSummary = async (req, res) => {
 const getPaymentMethodLabel = (method) => {
   const labels = {
     'efectivo': 'Efectivo',
+    'cash': 'Efectivo',
     'transferencia': 'Transferencia',
+    'transfer': 'Transferencia',
     'tarjeta': 'Tarjeta',
+    'card': 'Tarjeta',
     'mercadopago': 'MercadoPago',
+    'pending': 'Pendiente de Cobro',
     'sin_especificar': 'Sin especificar'
   };
   return labels[method] || method;
