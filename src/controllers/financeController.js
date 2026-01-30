@@ -14,12 +14,16 @@ const getFinancialSummary = async (req, res) => {
     let start, end, previousStart, previousEnd;
     
     if (period === 'custom' && startDate && endDate) {
-      // Custom date range - add time to avoid timezone issues
-      start = new Date(startDate + 'T00:00:00');
-      end = new Date(endDate + 'T23:59:59');
-      const rangeDays = Math.ceil((end - start) / (24 * 60 * 60 * 1000));
+      // Custom date range - use strings directly for date comparison
+      // Create Date objects with UTC to avoid timezone issues
+      start = new Date(startDate + 'T00:00:00Z');
+      end = new Date(endDate + 'T23:59:59Z');
+      const rangeDays = Math.ceil((end - start) / (24 * 60 * 60 * 1000)) + 1;
       previousStart = new Date(start.getTime() - rangeDays * 24 * 60 * 60 * 1000);
-      previousEnd = start;
+      previousEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+      // Store original strings for direct comparison with booking dates
+      start.dateStr = startDate;
+      end.dateStr = endDate;
     } else {
       end = now;
       switch (period) {
@@ -47,8 +51,9 @@ const getFinancialSummary = async (req, res) => {
       }
     }
 
-    const startStr = start.toISOString().split('T')[0];
-    const endStr = end.toISOString().split('T')[0];
+    // Use stored date strings for custom period, otherwise convert from Date
+    const startStr = start.dateStr || start.toISOString().split('T')[0];
+    const endStr = end.dateStr || end.toISOString().split('T')[0];
     const previousStartStr = previousStart.toISOString().split('T')[0];
     const previousEndStr = previousEnd.toISOString().split('T')[0];
 
@@ -492,9 +497,9 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
     let start, end;
     
     if (period === 'custom' && startDate && endDate) {
-      // Add time to avoid timezone issues
-      start = new Date(startDate + 'T00:00:00');
-      end = new Date(endDate + 'T23:59:59');
+      // Use UTC to avoid timezone issues
+      start = new Date(startDate + 'T00:00:00Z');
+      end = new Date(endDate + 'T23:59:59Z');
     } else {
       end = now;
       switch (period) {
