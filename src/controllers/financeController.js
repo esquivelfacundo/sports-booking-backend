@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, Payment, Order, Invoice, Client } = require('../models');
+const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 
 /**
@@ -83,18 +83,60 @@ const getFinancialSummary = async (req, res) => {
     });
 
     // Get current period orders (direct sales + kiosk/product sales)
-    // Use string dates to avoid timezone issues
-    const currentOrders = await Order.findAll({
+    // Use string dates to avoid timezone issues and raw: true for direct data access
+    const currentOrdersRaw = await Order.findAll({
       where: {
         establishmentId,
         createdAt: { [Op.between]: [startStr + 'T00:00:00', endStr + 'T23:59:59'] },
         status: { [Op.in]: ['completed', 'pending'] }
       },
-      include: [
-        { model: Invoice, as: 'invoice', attributes: ['id', 'status', 'anuladoPorId', 'tipoComprobante', 'importeTotal'] },
-        { model: Client, as: 'client', attributes: ['id', 'name', 'phone'] }
-      ]
+      raw: true
     });
+    
+    // Enrich orders with calculated totals (same logic as /ventas)
+    const currentOrders = await Promise.all(currentOrdersRaw.map(async (order) => {
+      let calculatedTotal = parseFloat(order.total) || 0;
+      let clientName = order.customerName;
+      let clientPhone = order.customerPhone;
+      
+      // Get client if exists
+      if (order.clientId && !clientName) {
+        const client = await Client.findByPk(order.clientId, { attributes: ['name', 'phone'], raw: true });
+        if (client) {
+          clientName = client.name;
+          clientPhone = client.phone;
+        }
+      }
+      
+      // For booking_consumption, calculate total from booking + consumptions
+      if (order.orderType === 'booking_consumption' && order.bookingId) {
+        const fullBooking = await Booking.findByPk(order.bookingId, {
+          attributes: ['id', 'totalAmount', 'depositAmount', 'clientName', 'clientPhone'],
+          raw: true
+        });
+        
+        const consumptions = await BookingConsumption.findAll({
+          where: { bookingId: order.bookingId },
+          raw: true
+        });
+        
+        const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+        const bookingTotal = parseFloat(fullBooking?.totalAmount) || 0;
+        calculatedTotal = bookingTotal + consumptionsTotal;
+        
+        if (!clientName && fullBooking) {
+          clientName = fullBooking.clientName;
+          clientPhone = fullBooking.clientPhone;
+        }
+      }
+      
+      return {
+        ...order,
+        total: calculatedTotal,
+        customerName: clientName || 'Cliente',
+        customerPhone: clientPhone || ''
+      };
+    }));
 
     // Get previous period bookings for comparison
     const previousBookings = await Booking.findAll({
@@ -334,24 +376,22 @@ const getFinancialSummary = async (req, res) => {
       const dateStr = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-${String(createdDate.getDate()).padStart(2, '0')}`;
       const timeStr = `${String(createdDate.getHours()).padStart(2, '0')}:${String(createdDate.getMinutes()).padStart(2, '0')}:${String(createdDate.getSeconds()).padStart(2, '0')}`;
       
-      // Get amount - use dataValues to ensure we get the raw value
-      const orderTotal = parseFloat(o.dataValues?.total || o.total || 0);
-      const isConsumption = o.orderType === 'booking_consumption' || o.orderType === 'reservation_consumption';
+      const isConsumption = o.orderType === 'booking_consumption';
       
       return {
         id: o.id,
         type: 'order',
         category: isConsumption ? 'Consumo en reserva' : 'Venta directa',
-        description: isConsumption ? `Consumo - ${o.customerName || o.client?.name || 'Cliente'}` : `Venta - ${o.customerName || o.client?.name || 'Cliente'}`,
-        amount: orderTotal,
+        description: isConsumption ? `Consumo - ${o.customerName}` : `Venta - ${o.customerName}`,
+        amount: o.total, // Already calculated correctly in enrichment step
         depositAmount: 0,
         date: dateStr,
         time: timeStr,
         status: o.status === 'completed' ? 'completed' : o.paymentStatus === 'paid' ? 'completed' : 'pending',
         paymentMethod: getPaymentMethodLabel(o.paymentMethod || 'sin_especificar'),
         reference: o.orderNumber,
-        clientName: o.customerName || o.client?.name || 'Cliente',
-        clientPhone: o.customerPhone || o.client?.phone || '',
+        clientName: o.customerName,
+        clientPhone: o.customerPhone,
         court: isConsumption ? 'Consumo' : 'Venta Directa',
         sortDate: createdDate
       };
