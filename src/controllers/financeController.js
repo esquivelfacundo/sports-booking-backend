@@ -177,24 +177,57 @@ const getFinancialSummary = async (req, res) => {
       };
     }
 
-    // Revenue by day (includes bookings and orders)
+    // Revenue by day (includes bookings and orders) - Generate ALL days in period
     const revenueByDay = {};
+    
+    // Initialize all days in the period with zero values
+    const currentDate = new Date(start);
+    while (currentDate <= now) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      revenueByDay[dateStr] = { 
+        revenue: 0, 
+        deposits: 0, 
+        bookings: 0, 
+        orders: 0,
+        byPaymentMethod: {}
+      };
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Add bookings data
     currentBookings.forEach(b => {
-      if (!revenueByDay[b.date]) {
-        revenueByDay[b.date] = { revenue: 0, deposits: 0, bookings: 0, orders: 0 };
+      if (revenueByDay[b.date]) {
+        const amount = parseFloat(b.totalAmount || 0);
+        revenueByDay[b.date].revenue += amount;
+        revenueByDay[b.date].deposits += parseFloat(b.depositAmount || 0);
+        revenueByDay[b.date].bookings += 1;
+        
+        // Track by payment method
+        const method = b.depositMethod || 'sin_especificar';
+        const methodLabel = getPaymentMethodLabel(method);
+        if (!revenueByDay[b.date].byPaymentMethod[methodLabel]) {
+          revenueByDay[b.date].byPaymentMethod[methodLabel] = 0;
+        }
+        revenueByDay[b.date].byPaymentMethod[methodLabel] += amount;
       }
-      revenueByDay[b.date].revenue += parseFloat(b.totalAmount || 0);
-      revenueByDay[b.date].deposits += parseFloat(b.depositAmount || 0);
-      revenueByDay[b.date].bookings += 1;
     });
+    
     // Add orders to daily revenue
     currentOrders.forEach(o => {
       const orderDate = o.createdAt.toISOString().split('T')[0];
-      if (!revenueByDay[orderDate]) {
-        revenueByDay[orderDate] = { revenue: 0, deposits: 0, bookings: 0, orders: 0 };
+      if (revenueByDay[orderDate]) {
+        const amount = parseFloat(o.total || 0);
+        revenueByDay[orderDate].revenue += amount;
+        revenueByDay[orderDate].orders += 1;
+        
+        // Track by payment method
+        const method = o.paymentMethod || 'sin_especificar';
+        const methodLabel = getPaymentMethodLabel(method);
+        if (!revenueByDay[orderDate].byPaymentMethod[methodLabel]) {
+          revenueByDay[orderDate].byPaymentMethod[methodLabel] = 0;
+        }
+        revenueByDay[orderDate].byPaymentMethod[methodLabel] += amount;
       }
-      revenueByDay[orderDate].revenue += parseFloat(o.total || 0);
-      revenueByDay[orderDate].orders += 1;
     });
 
     const dailyRevenue = Object.entries(revenueByDay)
