@@ -109,7 +109,9 @@ router.post('/', authenticateToken, async (req, res) => {
       unitCost,
       reason,
       notes,
-      invoiceNumber
+      invoiceNumber,
+      updateCostPrice,
+      updateSalePrice
     } = req.body;
 
     // Verify access
@@ -165,8 +167,21 @@ router.post('/', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Invalid movement type' });
     }
 
-    // Update product stock
-    await product.update({ currentStock: newStock }, { transaction });
+    // Build update object for product
+    const productUpdate = { currentStock: newStock };
+
+    // Update prices only for entrada type and if values are provided
+    if (type === 'entrada') {
+      if (updateCostPrice !== undefined && updateCostPrice !== null && !isNaN(updateCostPrice)) {
+        productUpdate.costPrice = updateCostPrice;
+      }
+      if (updateSalePrice !== undefined && updateSalePrice !== null && !isNaN(updateSalePrice)) {
+        productUpdate.salePrice = updateSalePrice;
+      }
+    }
+
+    // Update product stock and prices
+    await product.update(productUpdate, { transaction });
 
     // Create movement record
     const totalCost = unitCost ? unitCost * Math.abs(movementQuantity) : null;
