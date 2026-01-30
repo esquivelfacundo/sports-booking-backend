@@ -325,26 +325,46 @@ const getFinancialSummary = async (req, res) => {
       };
     }
 
-    // Recent transactions (bookings as income)
-    const recentTransactions = currentBookings
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 20)
-      .map(b => ({
-        id: b.id,
-        type: 'income',
-        category: 'Reservas',
-        description: `${b.court?.name || 'Cancha'} - ${b.clientName || 'Cliente'}`,
-        amount: parseFloat(b.totalAmount || 0),
-        depositAmount: parseFloat(b.depositAmount || 0),
-        date: b.date,
-        time: b.startTime,
-        status: b.status === 'completed' ? 'completed' : b.status === 'confirmed' ? 'completed' : 'pending',
-        paymentMethod: b.depositMethod || 'efectivo',
-        reference: b.checkInCode,
-        clientName: b.clientName,
-        clientPhone: b.clientPhone,
-        court: b.court?.name
-      }));
+    // All transactions (bookings + orders)
+    const bookingTransactions = currentBookings.map(b => ({
+      id: b.id,
+      type: 'booking',
+      category: 'Reserva',
+      description: `${b.court?.name || 'Cancha'} - ${b.clientName || 'Cliente'}`,
+      amount: parseFloat(b.totalAmount || 0),
+      depositAmount: parseFloat(b.depositAmount || 0),
+      date: b.date,
+      time: b.startTime,
+      status: b.status === 'completed' ? 'completed' : b.status === 'confirmed' ? 'confirmed' : 'pending',
+      paymentMethod: getPaymentMethodLabel(b.depositMethod || 'efectivo'),
+      reference: b.checkInCode,
+      clientName: b.clientName,
+      clientPhone: b.clientPhone,
+      court: b.court?.name,
+      sortDate: new Date(b.date + 'T' + (b.startTime || '00:00:00'))
+    }));
+
+    const orderTransactions = currentOrders.map(o => ({
+      id: o.id,
+      type: 'order',
+      category: o.type === 'reservation_consumption' ? 'Consumo en Reserva' : 'Venta Directa',
+      description: o.type === 'reservation_consumption' ? `Consumo - ${o.customerName || 'Cliente'}` : `Venta - ${o.customerName || 'Cliente'}`,
+      amount: parseFloat(o.total || 0),
+      depositAmount: 0,
+      date: o.createdAt.toISOString().split('T')[0],
+      time: o.createdAt.toISOString().split('T')[1].substring(0, 8),
+      status: o.status === 'completed' ? 'completed' : o.status === 'paid' ? 'completed' : 'pending',
+      paymentMethod: getPaymentMethodLabel(o.paymentMethod || 'sin_especificar'),
+      reference: o.orderNumber,
+      clientName: o.customerName || 'Cliente',
+      clientPhone: o.customerPhone || '',
+      court: o.type === 'reservation_consumption' ? 'Consumo' : 'Venta Directa',
+      sortDate: new Date(o.createdAt)
+    }));
+
+    const allTransactions = [...bookingTransactions, ...orderTransactions]
+      .sort((a, b) => b.sortDate - a.sortDate)
+      .map(({ sortDate, ...tx }) => tx);
 
     // Monthly comparison
     const monthlyData = [];
@@ -418,7 +438,7 @@ const getFinancialSummary = async (req, res) => {
         dailyRevenue,
         monthlyComparison: monthlyData
       },
-      transactions: recentTransactions
+      transactions: allTransactions
     });
 
   } catch (error) {
