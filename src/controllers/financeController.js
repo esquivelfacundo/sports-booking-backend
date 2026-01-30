@@ -7,38 +7,48 @@ const { Op, fn, col, literal } = require('sequelize');
 const getFinancialSummary = async (req, res) => {
   try {
     const { establishmentId } = req.params;
-    const { period = 'month' } = req.query;
+    const { period = 'month', startDate, endDate } = req.query;
 
-    // Calculate date range based on period
+    // Calculate date range based on period or custom dates
     const now = new Date();
-    let start, previousStart, previousEnd;
+    let start, end, previousStart, previousEnd;
     
-    switch (period) {
-      case 'week':
-        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        previousStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
-        previousEnd = start;
-        break;
-      case 'quarter':
-        start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        previousStart = new Date(start.getTime() - 90 * 24 * 60 * 60 * 1000);
-        previousEnd = start;
-        break;
-      case 'year':
-        start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-        previousStart = new Date(start.getTime() - 365 * 24 * 60 * 60 * 1000);
-        previousEnd = start;
-        break;
-      case 'month':
-      default:
-        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        previousStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
-        previousEnd = start;
-        break;
+    if (period === 'custom' && startDate && endDate) {
+      // Custom date range
+      start = new Date(startDate);
+      end = new Date(endDate);
+      const rangeDays = Math.ceil((end - start) / (24 * 60 * 60 * 1000));
+      previousStart = new Date(start.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+      previousEnd = start;
+    } else {
+      end = now;
+      switch (period) {
+        case 'week':
+          start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          previousStart = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
+          previousEnd = start;
+          break;
+        case 'quarter':
+          start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          previousStart = new Date(start.getTime() - 90 * 24 * 60 * 60 * 1000);
+          previousEnd = start;
+          break;
+        case 'year':
+          start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          previousStart = new Date(start.getTime() - 365 * 24 * 60 * 60 * 1000);
+          previousEnd = start;
+          break;
+        case 'month':
+        default:
+          start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          previousStart = new Date(start.getTime() - 30 * 24 * 60 * 60 * 1000);
+          previousEnd = start;
+          break;
+      }
     }
 
     const startStr = start.toISOString().split('T')[0];
-    const endStr = now.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
     const previousStartStr = previousStart.toISOString().split('T')[0];
     const previousEndStr = previousEnd.toISOString().split('T')[0];
 
@@ -59,7 +69,7 @@ const getFinancialSummary = async (req, res) => {
     const currentOrders = await Order.findAll({
       where: {
         establishmentId,
-        createdAt: { [Op.between]: [start, now] },
+        createdAt: { [Op.between]: [start, end] },
         status: { [Op.in]: ['completed', 'pending'] }
       },
       include: [
@@ -194,7 +204,7 @@ const getFinancialSummary = async (req, res) => {
     const currentDate = new Date(start);
     if (useWeeklyGrouping) {
       // Initialize weeks
-      while (currentDate <= now) {
+      while (currentDate <= end) {
         const weekKey = getWeekKey(currentDate);
         if (!revenueByPeriod[weekKey]) {
           revenueByPeriod[weekKey] = { 
@@ -209,7 +219,7 @@ const getFinancialSummary = async (req, res) => {
       }
     } else {
       // Initialize days
-      while (currentDate <= now) {
+      while (currentDate <= end) {
         const dateStr = currentDate.toISOString().split('T')[0];
         revenueByPeriod[dateStr] = { 
           revenue: 0, 
@@ -475,26 +485,32 @@ const getPendingPayments = async (req, res) => {
 const getSalesByProductAndPaymentMethod = async (req, res) => {
   try {
     const { establishmentId } = req.params;
-    const { period = 'month' } = req.query;
+    const { period = 'month', startDate, endDate } = req.query;
 
-    // Calculate date range based on period
+    // Calculate date range based on period or custom dates
     const now = new Date();
-    let start;
+    let start, end;
     
-    switch (period) {
-      case 'week':
-        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'quarter':
-        start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      case 'year':
-        start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-      default:
-        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
+    if (period === 'custom' && startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else {
+      end = now;
+      switch (period) {
+        case 'week':
+          start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'quarter':
+          start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case 'year':
+          start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+        default:
+          start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+      }
     }
 
     const { Order, OrderItem, OrderPayment, Product, PaymentMethod } = require('../models');
@@ -503,7 +519,7 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
     const orders = await Order.findAll({
       where: {
         establishmentId,
-        createdAt: { [Op.gte]: start },
+        createdAt: { [Op.between]: [start, end] },
         status: { [Op.in]: ['completed', 'pending'] }
       },
       include: [
