@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, Payment, Order, Invoice } = require('../models');
+const { Booking, Court, Establishment, Payment, Order, Invoice, Client } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 
 /**
