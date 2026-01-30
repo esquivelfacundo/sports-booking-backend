@@ -205,6 +205,7 @@ const createBooking = async (req, res) => {
     
     for (const bookingDate of bookingDates) {
       const checkInCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+      const reviewToken = crypto.randomBytes(32).toString('hex');
       
       const booking = await Booking.create({
         userId: bookingUserId,
@@ -230,7 +231,8 @@ const createBooking = async (req, res) => {
         isRecurring,
         depositAmount,
         initialDeposit: depositAmount,
-        depositMethod
+        depositMethod,
+        reviewToken
       });
       
       createdBookings.push(booking);
