@@ -402,6 +402,202 @@ router.get('/alerts/low-stock', authenticateToken, async (req, res) => {
   }
 });
 
+// Download import template CSV
+router.get('/import/template', authenticateToken, async (req, res) => {
+  try {
+    const csvUtils = require('../utils/csvGenerator');
+    
+    // Create template with example data
+    const templateData = [
+      {
+        nombre: 'Producto Ejemplo',
+        descripcion: 'Descripción del producto',
+        codigo_barras: '7790001000012',
+        sku: 'SKU001',
+        categoria: 'Bebidas',
+        precio_costo: '100.00',
+        precio_venta: '150.00',
+        stock_inicial: '10',
+        stock_minimo: '5',
+        stock_maximo: '50',
+        unidad: 'unidad'
+      }
+    ];
+
+    const fields = [
+      { label: 'nombre', value: 'nombre' },
+      { label: 'descripcion', value: 'descripcion' },
+      { label: 'codigo_barras', value: 'codigo_barras' },
+      { label: 'sku', value: 'sku' },
+      { label: 'categoria', value: 'categoria' },
+      { label: 'precio_costo', value: 'precio_costo' },
+      { label: 'precio_venta', value: 'precio_venta' },
+      { label: 'stock_inicial', value: 'stock_inicial' },
+      { label: 'stock_minimo', value: 'stock_minimo' },
+      { label: 'stock_maximo', value: 'stock_maximo' },
+      { label: 'unidad', value: 'unidad' }
+    ];
+
+    const csv = csvUtils.generateCSV(templateData, fields);
+    csvUtils.sendCSVResponse(res, csv, 'plantilla_productos.csv');
+  } catch (error) {
+    console.error('Error generating template:', error);
+    res.status(500).json({ error: 'Failed to generate template' });
+  }
+});
+
+// Import products from CSV
+router.post('/import', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, products } = req.body;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'establishmentId is required' });
+    }
+
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: 'products array is required' });
+    }
+
+    // Verify access
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get existing categories for this establishment
+    const categories = await ProductCategory.findAll({
+      where: { establishmentId }
+    });
+    const categoryMap = {};
+    categories.forEach(cat => {
+      categoryMap[cat.name.toLowerCase().trim()] = cat.id;
+    });
+
+    const results = {
+      success: 0,
+      errors: [],
+      created: []
+    };
+
+    // Process each product
+    for (let i = 0; i < products.length; i++) {
+      const row = products[i];
+      const rowNumber = i + 2; // +2 because row 1 is header
+
+      try {
+        // Validate required field (name)
+        const name = row.nombre?.toString().trim();
+        if (!name) {
+          results.errors.push({ row: rowNumber, error: 'El nombre es requerido' });
+          continue;
+        }
+
+        // Parse optional fields with null handling
+        const description = row.descripcion?.toString().trim() || null;
+        const barcode = row.codigo_barras?.toString().trim() || null;
+        const sku = row.sku?.toString().trim() || null;
+        const categoryName = row.categoria?.toString().trim() || null;
+        const costPrice = parseFloat(row.precio_costo) || 0;
+        const salePrice = parseFloat(row.precio_venta) || 0;
+        const currentStock = parseInt(row.stock_inicial) || 0;
+        const minStock = parseInt(row.stock_minimo) || 0;
+        const maxStock = row.stock_maximo ? parseInt(row.stock_maximo) : null;
+        const unit = row.unidad?.toString().trim() || 'unidad';
+
+        // Find or create category if provided
+        let categoryId = null;
+        if (categoryName) {
+          const existingCategoryId = categoryMap[categoryName.toLowerCase()];
+          if (existingCategoryId) {
+            categoryId = existingCategoryId;
+          } else {
+            // Create new category
+            const newCategory = await ProductCategory.create({
+              establishmentId,
+              name: categoryName,
+              color: '#6B7280'
+            });
+            categoryId = newCategory.id;
+            categoryMap[categoryName.toLowerCase()] = categoryId;
+          }
+        }
+
+        // Check if product with same barcode already exists
+        if (barcode) {
+          const existingProduct = await Product.findOne({
+            where: { establishmentId, barcode }
+          });
+          if (existingProduct) {
+            results.errors.push({ row: rowNumber, error: `Ya existe un producto con código de barras ${barcode}` });
+            continue;
+          }
+        }
+
+        // Calculate profit margin
+        const profitMargin = costPrice > 0 
+          ? ((salePrice - costPrice) / costPrice * 100).toFixed(2)
+          : 0;
+
+        // Create product
+        const product = await Product.create({
+          establishmentId,
+          categoryId,
+          name,
+          description,
+          barcode,
+          sku,
+          costPrice,
+          salePrice,
+          profitMargin,
+          currentStock,
+          minStock,
+          maxStock,
+          unit,
+          trackStock: true,
+          isActive: true
+        });
+
+        // If initial stock > 0, create stock movement
+        if (currentStock > 0) {
+          await StockMovement.create({
+            establishmentId,
+            productId: product.id,
+            userId: req.user.id,
+            type: 'entrada',
+            quantity: currentStock,
+            previousStock: 0,
+            newStock: currentStock,
+            unitCost: costPrice,
+            totalCost: costPrice * currentStock,
+            reason: 'Importación masiva'
+          });
+        }
+
+        results.success++;
+        results.created.push({ id: product.id, name: product.name });
+
+      } catch (rowError) {
+        console.error(`Error importing row ${rowNumber}:`, rowError);
+        results.errors.push({ row: rowNumber, error: rowError.message });
+      }
+    }
+
+    res.json({
+      message: `Importación completada: ${results.success} productos creados`,
+      ...results
+    });
+
+  } catch (error) {
+    console.error('Error importing products:', error);
+    res.status(500).json({ error: 'Failed to import products', message: error.message });
+  }
+});
+
 // Export low stock products to CSV
 router.get('/alerts/low-stock/export', authenticateToken, async (req, res) => {
   try {
