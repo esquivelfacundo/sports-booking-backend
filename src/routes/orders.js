@@ -1076,15 +1076,12 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
       paymentMethod: orderPaymentMethod
     });
 
-    // For booking_consumption orders, also update the booking's depositAmount
-    // so that /reservas sidebar sees the payment
+    // For booking_consumption orders, update the booking's paymentStatus
+    // Note: We don't update depositAmount to avoid double-counting in frontend
     if (order.orderType === 'booking_consumption' && order.bookingId) {
       const booking = await Booking.findByPk(order.bookingId);
       if (booking) {
-        const currentDeposit = parseFloat(booking.depositAmount) || 0;
-        const newDeposit = currentDeposit + parseFloat(amount);
         await booking.update({ 
-          depositAmount: newDeposit,
           paymentStatus: newPending <= 0 ? 'paid' : 'partial'
         });
       }

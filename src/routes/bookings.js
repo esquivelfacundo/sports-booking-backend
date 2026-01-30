@@ -3,7 +3,7 @@ const { body, query, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
 const qrService = require('../services/qrcode');
-const { Booking, Court, Establishment, BookingPayment } = require('../models');
+const { Booking, Court, Establishment, BookingPayment, Order, OrderPayment, User } = require('../models');
 const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
 const {
   createBooking,
@@ -828,6 +828,21 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
       order: [['paidAt', 'ASC']]
     });
 
+    // Get order payments from the associated order (if any)
+    let orderPayments = [];
+    const order = await Order.findOne({ where: { bookingId } });
+    if (order) {
+      orderPayments = await OrderPayment.findAll({
+        where: { orderId: order.id },
+        include: [{
+          model: User,
+          as: 'registeredByUser',
+          attributes: ['id', 'firstName', 'lastName']
+        }],
+        order: [['createdAt', 'DESC']]
+      });
+    }
+
     res.json({
       payments: payments.map(p => ({
         id: p.id,
@@ -836,6 +851,16 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
         playerName: p.playerName,
         paidAt: p.paidAt,
         mpPaymentId: p.mpPaymentId
+      })),
+      orderPayments: orderPayments.map(p => ({
+        id: p.id,
+        amount: parseFloat(p.amount),
+        paymentMethod: p.paymentMethod,
+        createdAt: p.createdAt,
+        registeredByUser: p.registeredByUser ? {
+          firstName: p.registeredByUser.firstName,
+          lastName: p.registeredByUser.lastName
+        } : null
       }))
     });
   } catch (error) {
