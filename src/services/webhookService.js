@@ -54,7 +54,7 @@ class WebhookService {
         {
           model: Court,
           as: 'court',
-          attributes: ['id', 'name', 'sportType']
+          attributes: ['id', 'name']
         },
         {
           model: Client,
