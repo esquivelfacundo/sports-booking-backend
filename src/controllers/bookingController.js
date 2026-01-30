@@ -973,6 +973,14 @@ const getEstablishmentBookings = async (req, res) => {
       order: [['date', 'DESC'], ['startTime', 'DESC']]
     });
 
+    // Generate reviewToken for bookings that don't have one
+    for (const booking of bookings) {
+      if (!booking.reviewToken) {
+        const token = crypto.randomBytes(32).toString('hex');
+        await booking.update({ reviewToken: token });
+      }
+    }
+
     // Convert Sequelize instances to plain objects to ensure associations are included
     const bookingsJson = bookings.map(b => b.toJSON());
 
