@@ -978,6 +978,7 @@ const getEstablishmentBookings = async (req, res) => {
       if (!booking.reviewToken) {
         const token = crypto.randomBytes(32).toString('hex');
         await booking.update({ reviewToken: token });
+        booking.reviewToken = token; // Update the instance too
       }
     }
 
