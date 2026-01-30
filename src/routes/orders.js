@@ -1151,9 +1151,14 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
     const completedOrders = await Order.count({ where: { ...where, status: 'completed' } });
     const paidOrders = await Order.count({ where: { ...where, paymentStatus: 'paid' } });
     
-    // Sum directly from order fields (matches table columns)
-    const totalRevenue = await Order.sum('total', { where }) || 0;
-    const totalPaid = await Order.sum('paidAmount', { where }) || 0;
+    // Calculate totals including booking.totalAmount for booking_consumption
+    const allOrders = await Order.findAll({ where, include: [{ model: Booking, as: 'booking' }], raw: true, nest: true });
+    let totalRevenue = 0, totalPaid = 0;
+    for (const o of allOrders) {
+      const bkTotal = (o.orderType === 'booking_consumption' && o.booking) ? (parseFloat(o.booking.totalAmount) || 0) : 0;
+      totalRevenue += bkTotal + (parseFloat(o.total) || 0);
+      totalPaid += parseFloat(o.paidAmount) || 0;
+    }
     const pendingAmount = Math.max(0, totalRevenue - totalPaid);
     
     const directSales = await Order.count({ where: { ...where, orderType: 'direct_sale' } });
