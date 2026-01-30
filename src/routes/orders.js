@@ -60,8 +60,8 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
     
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate + 'T00:00:00');
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
     }
 
     if (search) {
@@ -298,9 +298,9 @@ router.get('/export', authenticateToken, async (req, res) => {
     const where = { establishmentId };
 
     if (startDate && endDate) {
-      where.createdAt = { [Op.between]: [new Date(startDate), new Date(endDate + 'T23:59:59')] };
+      where.createdAt = { [Op.between]: [new Date(startDate + 'T00:00:00'), new Date(endDate + 'T23:59:59')] };
     } else if (startDate) {
-      where.createdAt = { [Op.gte]: new Date(startDate) };
+      where.createdAt = { [Op.gte]: new Date(startDate + 'T00:00:00') };
     } else if (endDate) {
       where.createdAt = { [Op.lte]: new Date(endDate + 'T23:59:59') };
     }
@@ -1112,8 +1112,8 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
     const where = { establishmentId };
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate + 'T00:00:00');
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
     }
 
     // Get totals
@@ -1169,7 +1169,7 @@ router.get('/sales-by-product/export', authenticateToken, async (req, res) => {
     if (startDate || endDate) {
       orderWhere.createdAt = {};
       if (startDate) {
-        orderWhere.createdAt[Op.gte] = new Date(startDate);
+        orderWhere.createdAt[Op.gte] = new Date(startDate + 'T00:00:00');
       }
       if (endDate) {
         orderWhere.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
@@ -1260,12 +1260,8 @@ router.get('/by-payment-method/export', authenticateToken, async (req, res) => {
 
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.createdAt[Op.lte] = end;
-      }
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate + 'T00:00:00');
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate + 'T23:59:59');
     }
 
     // Get all orders with their payments
