@@ -83,17 +83,16 @@ const getFinancialSummary = async (req, res) => {
     });
 
     // Get current period orders (direct sales + kiosk/product sales)
-    // Use string dates with time to properly filter by date range
-    const orderStartDate = new Date(startStr + 'T00:00:00');
-    const orderEndDate = new Date(endStr + 'T23:59:59');
+    // Use string dates to avoid timezone issues
     const currentOrders = await Order.findAll({
       where: {
         establishmentId,
-        createdAt: { [Op.between]: [orderStartDate, orderEndDate] },
+        createdAt: { [Op.between]: [startStr + 'T00:00:00', endStr + 'T23:59:59'] },
         status: { [Op.in]: ['completed', 'pending'] }
       },
       include: [
-        { model: Invoice, as: 'invoice', attributes: ['id', 'status', 'anuladoPorId', 'tipoComprobante', 'importeTotal'] }
+        { model: Invoice, as: 'invoice', attributes: ['id', 'status', 'anuladoPorId', 'tipoComprobante', 'importeTotal'] },
+        { model: Client, as: 'client', attributes: ['id', 'name', 'phone'] }
       ]
     });
 
@@ -328,46 +327,31 @@ const getFinancialSummary = async (req, res) => {
       };
     }
 
-    // All transactions (bookings + orders)
-    const bookingTransactions = currentBookings.map(b => ({
-      id: b.id,
-      type: 'booking',
-      category: 'Reserva',
-      description: `${b.court?.name || 'Cancha'} - ${b.clientName || 'Cliente'}`,
-      amount: parseFloat(b.totalAmount || 0),
-      depositAmount: parseFloat(b.depositAmount || 0),
-      date: b.date,
-      time: b.startTime,
-      status: b.status === 'completed' ? 'completed' : b.status === 'confirmed' ? 'confirmed' : 'pending',
-      paymentMethod: getPaymentMethodLabel(b.depositMethod || 'efectivo'),
-      reference: b.checkInCode,
-      clientName: b.clientName,
-      clientPhone: b.clientPhone,
-      court: b.court?.name,
-      sortDate: new Date(b.date + 'T' + (b.startTime || '00:00:00'))
-    }));
-
-    const orderTransactions = currentOrders.map(o => ({
-      id: o.id,
-      type: 'order',
-      category: o.type === 'reservation_consumption' ? 'Consumo en Reserva' : 'Venta Directa',
-      description: o.type === 'reservation_consumption' ? `Consumo - ${o.customerName || 'Cliente'}` : `Venta - ${o.customerName || 'Cliente'}`,
-      amount: parseFloat(o.total || 0),
-      depositAmount: 0,
-      date: o.createdAt.toISOString().split('T')[0],
-      time: o.createdAt.toISOString().split('T')[1].substring(0, 8),
-      status: o.status === 'completed' ? 'completed' : o.status === 'paid' ? 'completed' : 'pending',
-      paymentMethod: getPaymentMethodLabel(o.paymentMethod || 'sin_especificar'),
-      reference: o.orderNumber,
-      clientName: o.customerName || 'Cliente',
-      clientPhone: o.customerPhone || '',
-      court: o.type === 'reservation_consumption' ? 'Consumo' : 'Venta Directa',
-      sortDate: new Date(o.createdAt)
-    }));
-
-    const allTransactions = [...bookingTransactions, ...orderTransactions]
-      .sort((a, b) => b.sortDate - a.sortDate)
-      .map(({ sortDate, ...tx }) => tx);
+    // All transactions (only orders - same as /ventas page)
+    const allTransactions = currentOrders.map(o => {
+      // Format date manually to avoid timezone issues
+      const createdDate = new Date(o.createdAt);
+      const dateStr = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-${String(createdDate.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(createdDate.getHours()).padStart(2, '0')}:${String(createdDate.getMinutes()).padStart(2, '0')}:${String(createdDate.getSeconds()).padStart(2, '0')}`;
+      
+      return {
+        id: o.id,
+        type: 'order',
+        category: o.orderType === 'booking_consumption' ? 'Consumo en reserva' : 'Venta directa',
+        description: o.orderType === 'booking_consumption' ? `Consumo - ${o.customerName || o.client?.name || 'Cliente'}` : `Venta - ${o.customerName || o.client?.name || 'Cliente'}`,
+        amount: parseFloat(o.total || 0),
+        depositAmount: 0,
+        date: dateStr,
+        time: timeStr,
+        status: o.status === 'completed' ? 'completed' : o.paymentStatus === 'paid' ? 'completed' : 'pending',
+        paymentMethod: getPaymentMethodLabel(o.paymentMethod || 'sin_especificar'),
+        reference: o.orderNumber,
+        clientName: o.customerName || o.client?.name || 'Cliente',
+        clientPhone: o.customerPhone || o.client?.phone || '',
+        court: o.orderType === 'booking_consumption' ? 'Consumo' : 'Venta Directa',
+        sortDate: createdDate
+      };
+    }).sort((a, b) => b.sortDate - a.sortDate).map(({ sortDate, ...tx }) => tx);
 
     // Monthly comparison
     const monthlyData = [];
