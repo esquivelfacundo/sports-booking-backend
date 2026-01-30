@@ -14,9 +14,9 @@ const getFinancialSummary = async (req, res) => {
     let start, end, previousStart, previousEnd;
     
     if (period === 'custom' && startDate && endDate) {
-      // Custom date range
-      start = new Date(startDate);
-      end = new Date(endDate);
+      // Custom date range - add time to avoid timezone issues
+      start = new Date(startDate + 'T00:00:00');
+      end = new Date(endDate + 'T23:59:59');
       const rangeDays = Math.ceil((end - start) / (24 * 60 * 60 * 1000));
       previousStart = new Date(start.getTime() - rangeDays * 24 * 60 * 60 * 1000);
       previousEnd = start;
@@ -492,8 +492,9 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
     let start, end;
     
     if (period === 'custom' && startDate && endDate) {
-      start = new Date(startDate);
-      end = new Date(endDate);
+      // Add time to avoid timezone issues
+      start = new Date(startDate + 'T00:00:00');
+      end = new Date(endDate + 'T23:59:59');
     } else {
       end = now;
       switch (period) {
