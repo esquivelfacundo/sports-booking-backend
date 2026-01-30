@@ -83,10 +83,13 @@ const getFinancialSummary = async (req, res) => {
     });
 
     // Get current period orders (direct sales + kiosk/product sales)
+    // Use string dates with time to properly filter by date range
+    const orderStartDate = new Date(startStr + 'T00:00:00');
+    const orderEndDate = new Date(endStr + 'T23:59:59');
     const currentOrders = await Order.findAll({
       where: {
         establishmentId,
-        createdAt: { [Op.between]: [start, end] },
+        createdAt: { [Op.between]: [orderStartDate, orderEndDate] },
         status: { [Op.in]: ['completed', 'pending'] }
       },
       include: [
