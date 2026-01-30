@@ -333,6 +333,50 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Bulk delete products
+router.post('/bulk-delete', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, productIds } = req.body;
+
+    if (!establishmentId) {
+      return res.status(400).json({ error: 'establishmentId is required' });
+    }
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ error: 'productIds array is required' });
+    }
+
+    // Verify access
+    const establishment = await Establishment.findByPk(establishmentId);
+    if (!establishment) {
+      return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Soft delete - mark as inactive
+    const [updatedCount] = await Product.update(
+      { isActive: false },
+      {
+        where: {
+          id: { [Op.in]: productIds },
+          establishmentId
+        }
+      }
+    );
+
+    res.json({ 
+      message: `${updatedCount} producto${updatedCount !== 1 ? 's' : ''} eliminado${updatedCount !== 1 ? 's' : ''}`,
+      deletedCount: updatedCount
+    });
+  } catch (error) {
+    console.error('Error bulk deleting products:', error);
+    res.status(500).json({ error: 'Failed to delete products' });
+  }
+});
+
 // Delete product
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
