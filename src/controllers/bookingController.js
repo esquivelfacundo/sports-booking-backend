@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, User, Payment, SplitPayment, SplitPaymentParticipant, Client, Order, OrderPayment, Amenity } = require('../models');
+const { Booking, Court, Establishment, User, Payment, SplitPayment, SplitPaymentParticipant, Client, Order, Amenity } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const WebhookService = require('../services/webhookService');
@@ -486,22 +486,7 @@ const getBookingById = async (req, res) => {
       });
     }
 
-    // Get order payments from the associated order (if any)
-    let orderPayments = [];
-    const order = await Order.findOne({ where: { bookingId: id } });
-    if (order) {
-      orderPayments = await OrderPayment.findAll({
-        where: { orderId: order.id },
-        include: [{
-          model: User,
-          as: 'registeredByUser',
-          attributes: ['id', 'firstName', 'lastName']
-        }],
-        order: [['createdAt', 'DESC']]
-      });
-    }
-
-    res.json({ booking, orderPayments });
+    res.json({ booking });
 
   } catch (error) {
     console.error('Get booking error:', error);
