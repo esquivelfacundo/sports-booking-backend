@@ -1021,6 +1021,35 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // Calculate pending amount for validation
+    let realTotal = parseFloat(order.total) || 0;
+    let totalPaidSoFar = parseFloat(order.paidAmount) || 0;
+    
+    if (order.orderType === 'booking_consumption' && order.bookingId) {
+      const booking = await Booking.findByPk(order.bookingId, { raw: true });
+      if (booking) {
+        const bookingTotal = parseFloat(booking.totalAmount) || 0;
+        const BookingConsumption = require('../models').BookingConsumption;
+        const consumptions = await BookingConsumption.findAll({ where: { bookingId: order.bookingId }, raw: true });
+        realTotal = bookingTotal + consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+        
+        const depositAmount = parseFloat(booking.depositAmount) || 0;
+        const BookingPayment = require('../models').BookingPayment;
+        const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        const seña = Math.max(0, depositAmount - bpTotal);
+        
+        const opList = await OrderPayment.findAll({ where: { orderId: id }, raw: true });
+        const opTotal = opList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        totalPaidSoFar = seña + bpTotal + opTotal;
+      }
+    }
+    
+    const pendingAmount = Math.max(0, realTotal - totalPaidSoFar);
+    if (parseFloat(amount) > pendingAmount + 0.01) {
+      return res.status(400).json({ error: `El monto excede el pendiente ($${pendingAmount.toLocaleString()})` });
+    }
+
     // Create payment
     const payment = await OrderPayment.create({
       orderId: id,
@@ -1032,11 +1061,9 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
     });
 
     // Update order paid amount and status
-    const newPaidAmount = parseFloat(order.paidAmount) + parseFloat(amount);
-    let paymentStatus = 'partial';
-    if (newPaidAmount >= parseFloat(order.total)) {
-      paymentStatus = 'paid';
-    }
+    const newPaidAmount = totalPaidSoFar + parseFloat(amount);
+    const newPending = Math.max(0, realTotal - newPaidAmount);
+    let paymentStatus = newPending <= 0 ? 'paid' : 'partial';
 
     // Determine payment method for order
     const payments = await OrderPayment.findAll({ where: { orderId: id } });
