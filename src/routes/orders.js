@@ -135,6 +135,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       let calculatedTotal = order.total;
       let calculatedStatus = order.status;
       let calculatedPaymentStatus = order.paymentStatus;
+      let calculatedPaidAmount = parseFloat(order.paidAmount) || 0;
       
       if (order.orderType === 'booking_consumption' && order.bookingId) {
         // Get full booking data for status sync
@@ -180,13 +181,19 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         const depositAmount = parseFloat(fullBooking?.depositAmount) || 0;
         calculatedTotal = bookingTotal + consumptionsTotal;
         
+        // Calculate paid amount from booking payments
+        const BookingPayment = require('../models').BookingPayment;
+        const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        calculatedPaidAmount = depositAmount + bpTotal;
+        
         // Sync status with booking
         if (fullBooking) {
           calculatedStatus = fullBooking.status === 'completed' ? 'completed' : 
                             fullBooking.status === 'cancelled' ? 'cancelled' : 'pending';
           
-          // Calculate payment status based on pending amount
-          const pendingAmount = Math.max(0, calculatedTotal - depositAmount);
+          // Calculate payment status based on paid amount
+          const pendingAmount = Math.max(0, calculatedTotal - calculatedPaidAmount);
           if (pendingAmount <= 0) {
             calculatedPaymentStatus = 'paid';
           } else if (depositAmount > 0) {
@@ -234,6 +241,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         createdByUser,
         items: finalItems,
         total: calculatedTotal,
+        paidAmount: calculatedPaidAmount,
         status: calculatedStatus,
         paymentStatus: calculatedPaymentStatus,
         billingStatus
