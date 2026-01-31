@@ -426,7 +426,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     let bookingConsumptions = [];
     if (orderRaw.bookingId) {
       booking = await Booking.findByPk(orderRaw.bookingId, {
-        attributes: ['id', 'date', 'startTime', 'endTime', 'courtId', 'totalAmount', 'depositAmount', 'initialDeposit', 'clientName', 'clientPhone'],
+        attributes: ['id', 'date', 'startTime', 'endTime', 'courtId', 'totalAmount', 'depositAmount', 'initialDeposit', 'clientName', 'clientPhone', 'reviewToken'],
         raw: true
       });
       if (booking && booking.courtId) {
