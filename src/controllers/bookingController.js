@@ -210,6 +210,7 @@ const createBooking = async (req, res) => {
       const booking = await Booking.create({
         userId: bookingUserId,
         createdByStaffId: staffId,
+        createdBy: req.user?.id || null, // Track which user created the booking (null if self-service)
         establishmentId: establishment.id,
         courtId: courtId || null,
         amenityId: amenityId || null,
@@ -552,12 +553,14 @@ const updateBooking = async (req, res) => {
         updateData.cancellationReason = req.body.cancellationReason;
       } else if (status === 'completed') {
         updateData.completedAt = new Date();
+        updateData.completedBy = req.user?.id || null;
         // Generate review token for completed bookings
         if (!booking.reviewToken) {
           updateData.reviewToken = crypto.randomBytes(32).toString('hex');
         }
       } else if (status === 'in_progress') {
         updateData.startedAt = new Date();
+        updateData.startedBy = req.user?.id || null;
         
         // Create Order when booking starts (if not already exists)
         const existingOrder = await Order.findOne({

@@ -113,6 +113,9 @@ const defineAssociations = () => {
   Booking.belongsTo(Amenity, { foreignKey: 'amenityId', as: 'amenity' });
   Booking.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
   Booking.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
+  Booking.belongsTo(User, { foreignKey: 'createdBy', as: 'createdByUser' });
+  Booking.belongsTo(User, { foreignKey: 'startedBy', as: 'startedByUser' });
+  Booking.belongsTo(User, { foreignKey: 'completedBy', as: 'completedByUser' });
   Booking.hasMany(Payment, { foreignKey: 'bookingId', as: 'payments' });
   Booking.hasMany(BookingPayment, { foreignKey: 'bookingId', as: 'bookingPayments' });
   Booking.hasOne(SplitPayment, { foreignKey: 'bookingId', as: 'splitPayment' });

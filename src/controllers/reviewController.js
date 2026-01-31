@@ -21,11 +21,40 @@ const getEstablishmentReviews = async (req, res) => {
 
     const { count, rows: reviews } = await Review.findAndCountAll({
       where: { establishmentId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'firstName', 'lastName', 'profileImage']
-      }],
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'profileImage']
+        },
+        {
+          model: Court,
+          as: 'court',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Booking,
+          as: 'booking',
+          attributes: ['id', 'date', 'startTime', 'endTime', 'clientName', 'clientPhone', 'createdBy', 'startedBy', 'completedBy'],
+          include: [
+            {
+              model: User,
+              as: 'createdByUser',
+              attributes: ['id', 'firstName', 'lastName']
+            },
+            {
+              model: User,
+              as: 'startedByUser',
+              attributes: ['id', 'firstName', 'lastName']
+            },
+            {
+              model: User,
+              as: 'completedByUser',
+              attributes: ['id', 'firstName', 'lastName']
+            }
+          ]
+        }
+      ],
       order: [[sortBy, sortOrder]],
       limit: parseInt(limit),
       offset: parseInt(offset)

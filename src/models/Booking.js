@@ -198,6 +198,36 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'When the booking was started (in_progress)'
     },
+    createdBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      field: 'created_by',
+      references: {
+        model: 'users',
+        key: 'id'
+      },
+      comment: 'User who created the booking (null if self-service)'
+    },
+    startedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      field: 'started_by',
+      references: {
+        model: 'users',
+        key: 'id'
+      },
+      comment: 'User who started the booking (marked as in_progress)'
+    },
+    completedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      field: 'completed_by',
+      references: {
+        model: 'users',
+        key: 'id'
+      },
+      comment: 'User who completed the booking'
+    },
     reminderSent: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
