@@ -302,7 +302,7 @@ router.get('/puntos-venta/:establishmentId', authenticateToken, async (req, res)
     const { establishmentId } = req.params;
 
     const puntosVenta = await EstablishmentAfipPuntoVenta.findAll({
-      where: { establishmentId },
+      where: { establishmentId, isActive: true },
       order: [['numero', 'ASC']]
     });
 
