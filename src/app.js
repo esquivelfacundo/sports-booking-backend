@@ -95,7 +95,13 @@ app.delete('/api/cleanup-test-data', async (req, res) => {
   try {
     const results = [];
     const queries = [
+      // First: clear FKs pointing to orders/invoices
+      { name: 'current_account_movements', sql: 'DELETE FROM current_account_movements' },
+      { name: 'order_payments', sql: 'DELETE FROM order_payments' },
+      { name: 'order_items', sql: 'DELETE FROM order_items' },
+      { name: 'orders', sql: 'DELETE FROM orders' },
       { name: 'invoices', sql: 'DELETE FROM invoices' },
+      // Booking related
       { name: 'booking_consumptions', sql: 'DELETE FROM booking_consumptions' },
       { name: 'booking_payments', sql: 'DELETE FROM booking_payments' },
       { name: 'reviews', sql: 'DELETE FROM reviews' },
@@ -103,11 +109,10 @@ app.delete('/api/cleanup-test-data', async (req, res) => {
       { name: 'split_payments', sql: 'DELETE FROM split_payments' },
       { name: 'bookings', sql: 'DELETE FROM bookings' },
       { name: 'recurring_booking_groups', sql: 'DELETE FROM recurring_booking_groups' },
-      { name: 'order_payments', sql: 'DELETE FROM order_payments' },
-      { name: 'order_items', sql: 'DELETE FROM order_items' },
-      { name: 'orders', sql: 'DELETE FROM orders' },
+      // Cash registers
       { name: 'cash_register_movements', sql: 'DELETE FROM cash_register_movements' },
       { name: 'cash_registers', sql: 'DELETE FROM cash_registers' },
+      // Other
       { name: 'client_debts', sql: 'DELETE FROM client_debts' },
       { name: 'payments', sql: 'DELETE FROM payments' },
       { name: 'coupon_usages', sql: 'DELETE FROM coupon_usages' },
