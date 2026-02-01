@@ -1167,13 +1167,35 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
     const completedOrders = await Order.count({ where: { ...where, status: 'completed' } });
     const paidOrders = await Order.count({ where: { ...where, paymentStatus: 'paid' } });
     
-    // Calculate totals including booking.totalAmount for booking_consumption
+    // Calculate totals with same logic as order list (to match table values)
     const allOrders = await Order.findAll({ where, include: [{ model: Booking, as: 'booking' }], raw: true, nest: true });
     let totalRevenue = 0, totalPaid = 0;
+    
     for (const o of allOrders) {
-      const bkTotal = (o.orderType === 'booking_consumption' && o.booking) ? (parseFloat(o.booking.totalAmount) || 0) : 0;
-      totalRevenue += bkTotal + (parseFloat(o.total) || 0);
-      totalPaid += parseFloat(o.paidAmount) || 0;
+      if (o.orderType === 'booking_consumption' && o.bookingId) {
+        // For booking consumptions, calculate like in the order list
+        const bookingTotal = parseFloat(o.booking?.totalAmount) || 0;
+        const depositAmount = parseFloat(o.booking?.depositAmount) || 0;
+        const initialDeposit = parseFloat(o.booking?.initialDeposit) || 0;
+        
+        // Get consumptions total
+        const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+        
+        // Get booking payments
+        const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        
+        // Calculate seña (same logic as sidebar)
+        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        
+        totalRevenue += bookingTotal + consumptionsTotal;
+        totalPaid += seña + bpTotal;
+      } else {
+        // For direct sales, use order values directly
+        totalRevenue += parseFloat(o.total) || 0;
+        totalPaid += parseFloat(o.paidAmount) || 0;
+      }
     }
     const pendingAmount = Math.max(0, totalRevenue - totalPaid);
     
