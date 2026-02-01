@@ -227,6 +227,42 @@ router.put('/config/:establishmentId/activate', authenticateToken, async (req, r
   }
 });
 
+/**
+ * DELETE /api/arca/config/:establishmentId
+ * Delete AFIP configuration completely (disconnect)
+ */
+router.delete('/config/:establishmentId', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId } = req.params;
+
+    // First delete all puntos de venta
+    await EstablishmentAfipPuntoVenta.destroy({
+      where: { establishmentId }
+    });
+
+    // Then delete the config
+    const deleted = await EstablishmentAfipConfig.destroy({
+      where: { establishmentId }
+    });
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Configuración no encontrada' });
+    }
+
+    // Invalidate cache
+    ArcaFactory.invalidateCache(establishmentId);
+
+    res.json({
+      success: true,
+      message: 'Configuración AFIP eliminada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('[ARCA] Error deleting config:', error);
+    res.status(500).json({ error: 'Error al eliminar la configuración AFIP' });
+  }
+});
+
 // =====================================================
 // PUNTOS DE VENTA ENDPOINTS
 // =====================================================
