@@ -245,8 +245,9 @@ router.delete('/config/:establishmentId', authenticateToken, async (req, res) =>
 
     // Clear sensitive data and deactivate (keep record for invoice history)
     await config.update({
-      encryptedCert: null,
-      encryptedKey: null,
+      encryptedCert: '',
+      encryptedKey: '',
+      certExpiration: null,
       isActive: false,
       isVerified: false,
       lastTestResult: null,
