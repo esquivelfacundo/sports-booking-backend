@@ -156,18 +156,32 @@ const getFinancialSummary = async (req, res) => {
       }
     });
 
-    // Calculate booking revenue
+    // Calculate booking revenue (only from bookings table)
     const bookingRevenue = currentBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
     
-    // Calculate order revenue (kiosk/product sales)
-    const orderRevenue = currentOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+    // Calculate kiosk/product revenue (only products sold, not booking amounts)
+    // For direct_sale: sum order total (products only)
+    // For booking_consumption: sum only the consumptions (products added to booking)
+    let kioskRevenue = 0;
+    for (const o of currentOrders) {
+      if (o.orderType === 'direct_sale') {
+        kioskRevenue += parseFloat(o.total || 0);
+      } else if (o.orderType === 'booking_consumption' && o.bookingId) {
+        // Only sum the consumptions (products), not the booking amount
+        const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+        kioskRevenue += consumptionsTotal;
+      }
+    }
     
-    // Total revenue = bookings + orders
-    const totalRevenue = bookingRevenue + orderRevenue;
+    // Total revenue = bookings + kiosk products
+    const totalRevenue = bookingRevenue + kioskRevenue;
+    // Keep orderRevenue for backwards compatibility (now it's just kiosk)
+    const orderRevenue = kioskRevenue;
     
     // Previous period totals
     const previousBookingRevenue = previousBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
-    const previousOrderRevenue = previousOrders.reduce((sum, o) => sum + parseFloat(o.total || 0), 0);
+    const previousOrderRevenue = previousOrders.reduce((sum, o) => parseFloat(o.total || 0), 0);
     const previousRevenue = previousBookingRevenue + previousOrderRevenue;
     const revenueGrowth = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
@@ -175,38 +189,36 @@ const getFinancialSummary = async (req, res) => {
     const totalDeposits = currentBookings.reduce((sum, b) => sum + parseFloat(b.depositAmount || 0), 0);
     const pendingBalance = bookingRevenue - totalDeposits;
     
-    // Calculate totalPaid and pendingAmount (same logic as /ventas)
+    // Calculate totalPaid and totalPending using same logic as /ventas (iterate over orders)
     let totalPaid = 0;
     let totalPending = 0;
     
-    // For bookings: paid = seña + booking payments
-    for (const b of currentBookings) {
-      const bookingTotal = parseFloat(b.totalAmount || 0);
-      const depositAmount = parseFloat(b.depositAmount || 0);
-      const initialDeposit = parseFloat(b.initialDeposit || 0);
-      
-      // Get booking payments
-      const bpList = await BookingPayment.findAll({ where: { bookingId: b.id }, raw: true });
-      const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-      
-      // Calculate seña (same logic as sidebar)
-      const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
-      
-      const bookingPaid = seña + bpTotal;
-      totalPaid += bookingPaid;
-      totalPending += Math.max(0, bookingTotal - bookingPaid);
-    }
-    
-    // For orders: use paidAmount for direct sales, calculate for booking_consumption
     for (const o of currentOrders) {
       if (o.orderType === 'booking_consumption' && o.bookingId) {
-        // Already counted in booking above, just add consumptions
+        // For booking_consumption, calculate like in /ventas
+        const fullBooking = await Booking.findByPk(o.bookingId, { raw: true });
+        const bookingTotal = parseFloat(fullBooking?.totalAmount) || 0;
+        const depositAmount = parseFloat(fullBooking?.depositAmount) || 0;
+        const initialDeposit = parseFloat(fullBooking?.initialDeposit) || 0;
+        
+        // Get consumptions total
         const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
         const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
-        // Consumptions are typically paid when ordered or added to booking pending
-        totalPending += consumptionsTotal; // Add consumptions to pending (will be paid with booking)
+        
+        // Get booking payments
+        const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        
+        // Calculate seña (same logic as sidebar)
+        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        
+        const orderTotal = bookingTotal + consumptionsTotal;
+        const orderPaid = seña + bpTotal;
+        
+        totalPaid += orderPaid;
+        totalPending += Math.max(0, orderTotal - orderPaid);
       } else {
-        // Direct sale - use order values
+        // Direct sale - use order values directly
         const orderTotal = parseFloat(o.total || 0);
         const orderPaid = parseFloat(o.paidAmount || 0);
         totalPaid += orderPaid;
