@@ -98,7 +98,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       let booking = null;
       if (order.bookingId) {
         booking = await Booking.findByPk(order.bookingId, {
-          attributes: ['id', 'date', 'startTime', 'endTime'],
+          attributes: ['id', 'date', 'startTime', 'endTime', 'totalAmount', 'depositAmount', 'initialDeposit', 'clientName'],
           raw: true
         });
       }
@@ -179,13 +179,21 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         // Calculate total from booking + consumptions
         const bookingTotal = parseFloat(fullBooking?.totalAmount) || 0;
         const depositAmount = parseFloat(fullBooking?.depositAmount) || 0;
+        const initialDeposit = parseFloat(fullBooking?.initialDeposit) || 0;
         calculatedTotal = bookingTotal + consumptionsTotal;
         
-        // Calculate paid amount from booking payments
+        // Calculate paid amount from booking payments (same logic as sidebar)
         const BookingPayment = require('../models').BookingPayment;
         const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
         const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        calculatedPaidAmount = depositAmount + bpTotal;
+        
+        // Seña = initialDeposit if exists, otherwise depositAmount - bookingPayments (to avoid double counting)
+        const seña = initialDeposit > 0 
+          ? initialDeposit 
+          : Math.max(0, depositAmount - bpTotal);
+        
+        // Total paid = seña + booking payments
+        calculatedPaidAmount = seña + bpTotal;
         
         // Sync status with booking
         if (fullBooking) {
