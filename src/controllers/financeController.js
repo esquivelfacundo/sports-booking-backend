@@ -261,28 +261,66 @@ const getFinancialSummary = async (req, res) => {
     });
     const pendingPayments = pendingBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0);
 
-    // Revenue by payment method (includes bookings and orders)
+    // Revenue by payment method - should show PAID amounts, not totals
     const paymentMethods = {};
-    currentBookings.forEach(b => {
-      const method = b.depositMethod || 'sin_especificar';
-      if (!paymentMethods[method]) {
-        paymentMethods[method] = { count: 0, amount: 0 };
+    
+    // For each order, calculate what was actually paid and by which method
+    for (const o of currentOrders) {
+      if (o.orderType === 'booking_consumption' && o.bookingId) {
+        // Get booking payment details
+        const fullBooking = await Booking.findByPk(o.bookingId, { raw: true });
+        const depositAmount = parseFloat(fullBooking?.depositAmount) || 0;
+        const initialDeposit = parseFloat(fullBooking?.initialDeposit) || 0;
+        const depositMethod = fullBooking?.depositMethod || 'sin_especificar';
+        
+        // Get booking payments
+        const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        
+        // Calculate seña
+        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        
+        // Add seña to deposit method
+        if (seña > 0) {
+          if (!paymentMethods[depositMethod]) {
+            paymentMethods[depositMethod] = { count: 0, amount: 0 };
+          }
+          paymentMethods[depositMethod].count += 1;
+          paymentMethods[depositMethod].amount += seña;
+        }
+        
+        // Add each booking payment to its method
+        for (const bp of bpList) {
+          const bpMethod = bp.method || 'cash';
+          if (!paymentMethods[bpMethod]) {
+            paymentMethods[bpMethod] = { count: 0, amount: 0 };
+          }
+          paymentMethods[bpMethod].count += 1;
+          paymentMethods[bpMethod].amount += parseFloat(bp.amount) || 0;
+        }
+      } else {
+        // Direct sale - use paidAmount
+        const method = o.paymentMethod || 'sin_especificar';
+        const paidAmount = parseFloat(o.paidAmount || 0);
+        if (paidAmount > 0) {
+          if (!paymentMethods[method]) {
+            paymentMethods[method] = { count: 0, amount: 0 };
+          }
+          paymentMethods[method].count += 1;
+          paymentMethods[method].amount += paidAmount;
+        }
       }
-      paymentMethods[method].count += 1;
-      paymentMethods[method].amount += parseFloat(b.totalAmount || 0);
-    });
-    // Add orders to payment methods
-    currentOrders.forEach(o => {
-      const method = o.paymentMethod || 'sin_especificar';
-      if (!paymentMethods[method]) {
-        paymentMethods[method] = { count: 0, amount: 0 };
-      }
-      paymentMethods[method].count += 1;
-      paymentMethods[method].amount += parseFloat(o.total || 0);
-    });
+    }
+    
+    // Add "Pendiente de Cobro" as a pseudo payment method showing total pending
+    if (totalPending > 0) {
+      paymentMethods['pendiente'] = { count: 0, amount: totalPending };
+    }
 
-    // Revenue by court (bookings + booking_consumption orders go to their court, direct_sale goes to Kiosco)
+    // Revenue by court (bookings go to their court, ALL product sales go to Kiosco/Ventas)
     const revenueByCourt = {};
+    
+    // Bookings go to their court
     currentBookings.forEach(b => {
       const courtName = b.court?.name || 'Sin cancha';
       if (!revenueByCourt[courtName]) {
@@ -292,29 +330,10 @@ const getFinancialSummary = async (req, res) => {
       revenueByCourt[courtName].amount += parseFloat(b.totalAmount || 0);
     });
     
-    // Process orders - separate by type
-    for (const o of currentOrders) {
-      if (o.orderType === 'booking_consumption' && o.bookingId) {
-        // Booking consumption - add to the court of the booking
-        const booking = await Booking.findByPk(o.bookingId, {
-          include: [{ model: Court, as: 'court', attributes: ['name'] }]
-        });
-        const courtName = booking?.court?.name || 'Sin cancha';
-        if (!revenueByCourt[courtName]) {
-          revenueByCourt[courtName] = { count: 0, amount: 0 };
-        }
-        // Add only the consumptions total (not the booking total which is already counted)
-        const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
-        const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
-        revenueByCourt[courtName].amount += consumptionsTotal;
-      } else {
-        // Direct sale - add to Kiosco/Ventas
-        if (!revenueByCourt['Kiosco/Ventas']) {
-          revenueByCourt['Kiosco/Ventas'] = { count: 0, amount: 0 };
-        }
-        revenueByCourt['Kiosco/Ventas'].count += 1;
-        revenueByCourt['Kiosco/Ventas'].amount += parseFloat(o.total || 0);
-      }
+    // ALL product sales (direct + booking consumptions) go to Kiosco/Ventas
+    // kioskRevenue already has this calculated correctly
+    if (kioskRevenue > 0) {
+      revenueByCourt['Kiosco/Ventas'] = { count: currentOrders.length, amount: kioskRevenue };
     }
 
     // Revenue by period (daily for week/month, weekly for quarter/year)
@@ -420,8 +439,10 @@ const getFinancialSummary = async (req, res) => {
       .map(([date, data]) => ({ date, ...data, isWeekly: useWeeklyGrouping }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Revenue by booking type (includes orders as "Venta Directa")
+    // Revenue by type (bookings by bookingType, orders by orderType)
     const revenueByType = {};
+    
+    // Add bookings by their type
     currentBookings.forEach(b => {
       const type = b.bookingType || 'normal';
       if (!revenueByType[type]) {
@@ -430,12 +451,24 @@ const getFinancialSummary = async (req, res) => {
       revenueByType[type].count += 1;
       revenueByType[type].amount += parseFloat(b.totalAmount || 0);
     });
-    // Add orders as "Venta Directa" type
-    if (currentOrders.length > 0) {
-      revenueByType['venta_directa'] = {
-        count: currentOrders.length,
-        amount: orderRevenue
-      };
+    
+    // Add orders separated by orderType
+    for (const o of currentOrders) {
+      if (o.orderType === 'booking_consumption') {
+        // Consumo en reserva - add full order total (booking + consumptions)
+        if (!revenueByType['consumo_en_reserva']) {
+          revenueByType['consumo_en_reserva'] = { count: 0, amount: 0 };
+        }
+        revenueByType['consumo_en_reserva'].count += 1;
+        revenueByType['consumo_en_reserva'].amount += parseFloat(o.total || 0);
+      } else {
+        // Venta directa
+        if (!revenueByType['venta_directa']) {
+          revenueByType['venta_directa'] = { count: 0, amount: 0 };
+        }
+        revenueByType['venta_directa'].count += 1;
+        revenueByType['venta_directa'].amount += parseFloat(o.total || 0);
+      }
     }
 
     // All transactions (only orders - same as /ventas page)
@@ -621,6 +654,7 @@ const getPaymentMethodLabel = (method) => {
     'card': 'Tarjeta',
     'mercadopago': 'MercadoPago',
     'pending': 'Pendiente de Cobro',
+    'pendiente': 'Pendiente de Cobro',
     'sin_especificar': 'Sin especificar'
   };
   return labels[method] || method;
@@ -634,7 +668,8 @@ const getBookingTypeLabel = (type) => {
     'escuela': 'Escuela',
     'cumpleanos': 'Cumpleaños',
     'abonado': 'Abonado',
-    'venta_directa': 'Venta Directa'
+    'venta_directa': 'Venta Directa',
+    'consumo_en_reserva': 'Consumo en Reserva'
   };
   return labels[type] || type;
 };
