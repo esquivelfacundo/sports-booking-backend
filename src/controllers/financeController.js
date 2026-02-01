@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product } = require('../models');
+const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product, BookingPayment } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 
 /**
@@ -174,6 +174,45 @@ const getFinancialSummary = async (req, res) => {
     // Calculate deposits/advances (only from bookings)
     const totalDeposits = currentBookings.reduce((sum, b) => sum + parseFloat(b.depositAmount || 0), 0);
     const pendingBalance = bookingRevenue - totalDeposits;
+    
+    // Calculate totalPaid and pendingAmount (same logic as /ventas)
+    let totalPaid = 0;
+    let totalPending = 0;
+    
+    // For bookings: paid = seña + booking payments
+    for (const b of currentBookings) {
+      const bookingTotal = parseFloat(b.totalAmount || 0);
+      const depositAmount = parseFloat(b.depositAmount || 0);
+      const initialDeposit = parseFloat(b.initialDeposit || 0);
+      
+      // Get booking payments
+      const bpList = await BookingPayment.findAll({ where: { bookingId: b.id }, raw: true });
+      const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+      
+      // Calculate seña (same logic as sidebar)
+      const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+      
+      const bookingPaid = seña + bpTotal;
+      totalPaid += bookingPaid;
+      totalPending += Math.max(0, bookingTotal - bookingPaid);
+    }
+    
+    // For orders: use paidAmount for direct sales, calculate for booking_consumption
+    for (const o of currentOrders) {
+      if (o.orderType === 'booking_consumption' && o.bookingId) {
+        // Already counted in booking above, just add consumptions
+        const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+        // Consumptions are typically paid when ordered or added to booking pending
+        totalPending += consumptionsTotal; // Add consumptions to pending (will be paid with booking)
+      } else {
+        // Direct sale - use order values
+        const orderTotal = parseFloat(o.total || 0);
+        const orderPaid = parseFloat(o.paidAmount || 0);
+        totalPaid += orderPaid;
+        totalPending += Math.max(0, orderTotal - orderPaid);
+      }
+    }
 
     // Calculate invoiced vs non-invoiced amounts
     // A sale is "invoiced" if it has an invoice that is NOT cancelled (status != 'anulado' and anuladoPorId is null)
@@ -230,7 +269,7 @@ const getFinancialSummary = async (req, res) => {
       paymentMethods[method].amount += parseFloat(o.total || 0);
     });
 
-    // Revenue by court (bookings only - orders don't have courts)
+    // Revenue by court (bookings + booking_consumption orders go to their court, direct_sale goes to Kiosco)
     const revenueByCourt = {};
     currentBookings.forEach(b => {
       const courtName = b.court?.name || 'Sin cancha';
@@ -240,12 +279,30 @@ const getFinancialSummary = async (req, res) => {
       revenueByCourt[courtName].count += 1;
       revenueByCourt[courtName].amount += parseFloat(b.totalAmount || 0);
     });
-    // Add orders as "Kiosco/Ventas" category
-    if (currentOrders.length > 0) {
-      revenueByCourt['Kiosco/Ventas'] = {
-        count: currentOrders.length,
-        amount: orderRevenue
-      };
+    
+    // Process orders - separate by type
+    for (const o of currentOrders) {
+      if (o.orderType === 'booking_consumption' && o.bookingId) {
+        // Booking consumption - add to the court of the booking
+        const booking = await Booking.findByPk(o.bookingId, {
+          include: [{ model: Court, as: 'court', attributes: ['name'] }]
+        });
+        const courtName = booking?.court?.name || 'Sin cancha';
+        if (!revenueByCourt[courtName]) {
+          revenueByCourt[courtName] = { count: 0, amount: 0 };
+        }
+        // Add only the consumptions total (not the booking total which is already counted)
+        const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+        revenueByCourt[courtName].amount += consumptionsTotal;
+      } else {
+        // Direct sale - add to Kiosco/Ventas
+        if (!revenueByCourt['Kiosco/Ventas']) {
+          revenueByCourt['Kiosco/Ventas'] = { count: 0, amount: 0 };
+        }
+        revenueByCourt['Kiosco/Ventas'].count += 1;
+        revenueByCourt['Kiosco/Ventas'].amount += parseFloat(o.total || 0);
+      }
     }
 
     // Revenue by period (daily for week/month, weekly for quarter/year)
@@ -442,7 +499,10 @@ const getFinancialSummary = async (req, res) => {
         totalNotInvoiced,
         totalBookings: currentBookings.length,
         totalOrders: currentOrders.length,
-        averageTicket: currentBookings.length > 0 ? bookingRevenue / currentBookings.length : 0,
+        totalSales: currentBookings.length + currentOrders.length,
+        totalPaid,
+        totalPending,
+        averageTicket: (currentBookings.length + currentOrders.length) > 0 ? totalRevenue / (currentBookings.length + currentOrders.length) : 0,
         growth: {
           revenue: Math.round(revenueGrowth * 10) / 10,
           trend: revenueGrowth > 0 ? 'up' : revenueGrowth < 0 ? 'down' : 'stable'
