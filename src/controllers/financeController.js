@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product, BookingPayment } = require('../models');
+const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product, BookingPayment, OrderItem, EstablishmentUser } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 
 /**
@@ -439,7 +439,7 @@ const getFinancialSummary = async (req, res) => {
     }
 
     // All transactions (only orders - same as /ventas page)
-    const allTransactions = currentOrders.map(o => {
+    const allTransactions = await Promise.all(currentOrders.map(async (o) => {
       // Format date manually to avoid timezone issues
       const createdDate = new Date(o.createdAt);
       const dateStr = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}-${String(createdDate.getDate()).padStart(2, '0')}`;
@@ -447,24 +447,82 @@ const getFinancialSummary = async (req, res) => {
       
       const isConsumption = o.orderType === 'booking_consumption';
       
+      // Get order items count
+      const orderItems = await OrderItem.findAll({ where: { orderId: o.id }, raw: true });
+      const itemsCount = orderItems.length;
+      
+      // Get created by user
+      let createdByUser = 'Sistema';
+      if (o.createdByUserId) {
+        const user = await EstablishmentUser.findByPk(o.createdByUserId, { attributes: ['name'], raw: true });
+        if (user) createdByUser = user.name;
+      }
+      
+      // Get invoice/billing status
+      const invoice = await Invoice.findOne({ where: { orderId: o.id }, raw: true });
+      let billingStatus = 'not_invoiced';
+      if (invoice) {
+        if (invoice.status === 'emitido' && !invoice.anuladoPorId) {
+          billingStatus = 'invoiced';
+        } else if (invoice.anuladoPorId) {
+          billingStatus = 'credit_note';
+        }
+      }
+      
+      // Calculate paidAmount based on order type (same logic as /ventas)
+      let paidAmount = 0;
+      let bookingDate = null;
+      let bookingTime = null;
+      
+      if (isConsumption && o.bookingId) {
+        // For booking_consumption, paid = seña + booking payments
+        const fullBooking = await Booking.findByPk(o.bookingId, { raw: true });
+        const depositAmount = parseFloat(fullBooking?.depositAmount) || 0;
+        const initialDeposit = parseFloat(fullBooking?.initialDeposit) || 0;
+        
+        const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
+        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        
+        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        paidAmount = seña + bpTotal;
+        
+        bookingDate = fullBooking?.date;
+        bookingTime = fullBooking?.startTime || fullBooking?.time;
+      } else {
+        // Direct sale - use paidAmount from order
+        paidAmount = parseFloat(o.paidAmount) || 0;
+      }
+      
       return {
         id: o.id,
         type: 'order',
         category: isConsumption ? 'Consumo en reserva' : 'Venta directa',
         description: isConsumption ? `Consumo - ${o.customerName}` : `Venta - ${o.customerName}`,
-        amount: o.total, // Already calculated correctly in enrichment step
+        amount: o.total,
+        paidAmount: paidAmount,
         depositAmount: 0,
         date: dateStr,
         time: timeStr,
         status: o.status === 'completed' ? 'completed' : o.paymentStatus === 'paid' ? 'completed' : 'pending',
+        paymentStatus: o.paymentStatus || 'pending',
         paymentMethod: getPaymentMethodLabel(o.paymentMethod || 'sin_especificar'),
         reference: o.orderNumber,
         clientName: o.customerName,
         clientPhone: o.customerPhone,
         court: isConsumption ? 'Consumo' : 'Venta Directa',
+        itemsCount: itemsCount,
+        createdByUser: createdByUser,
+        billingStatus: billingStatus,
+        bookingDate: bookingDate,
+        bookingTime: bookingTime,
         sortDate: createdDate
       };
-    }).sort((a, b) => b.sortDate - a.sortDate).map(({ sortDate, ...tx }) => tx);
+    }));
+    
+    // Sort by date descending and remove sortDate
+    const sortedTransactions = allTransactions
+      .sort((a, b) => b.sortDate - a.sortDate)
+      .map(({ sortDate, ...tx }) => tx);
 
     // Monthly comparison
     const monthlyData = [];
@@ -541,7 +599,7 @@ const getFinancialSummary = async (req, res) => {
         dailyRevenue,
         monthlyComparison: monthlyData
       },
-      transactions: allTransactions
+      transactions: sortedTransactions
     });
 
   } catch (error) {
