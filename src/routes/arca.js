@@ -15,7 +15,8 @@ const {
   Establishment,
   Order,
   Booking,
-  User
+  User,
+  sequelize
 } = require('../models');
 const { 
   ArcaFactory, 
@@ -243,21 +244,29 @@ router.delete('/config/:establishmentId', authenticateToken, async (req, res) =>
       return res.status(404).json({ error: 'Configuración no encontrada' });
     }
 
-    // Clear all data and deactivate (keep record ID for invoice history)
-    await config.update({
-      cuit: '',
-      razonSocial: '',
-      domicilioFiscal: '',
-      condicionFiscal: 'monotributista',
-      inicioActividades: null,
-      encryptedCert: '',
-      encryptedKey: '',
-      certExpiration: null,
-      isActive: false,
-      isVerified: false,
-      lastTestResult: null,
-      lastTestedAt: null,
-      updatedById: req.user.id
+    // Clear all data using raw query to bypass model validations
+    // Keep record for invoice history foreign key references
+    await sequelize.query(`
+      UPDATE establishment_afip_configs 
+      SET 
+        cuit = '00000000000',
+        razon_social = '',
+        domicilio_fiscal = '',
+        condicion_fiscal = 'monotributista',
+        inicio_actividades = '2000-01-01',
+        encrypted_cert = '',
+        encrypted_key = '',
+        cert_expiration = NULL,
+        is_active = false,
+        is_verified = false,
+        last_test_result = NULL,
+        last_tested_at = NULL,
+        updated_by_id = :userId,
+        updated_at = NOW()
+      WHERE establishment_id = :establishmentId
+    `, {
+      replacements: { establishmentId, userId: req.user.id },
+      type: sequelize.QueryTypes.UPDATE
     });
 
     // Deactivate all puntos de venta (don't delete - needed for invoice history)
