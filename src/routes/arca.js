@@ -243,14 +243,20 @@ router.delete('/config/:establishmentId', authenticateToken, async (req, res) =>
       return res.status(404).json({ error: 'Configuración no encontrada' });
     }
 
-    // Clear sensitive data and deactivate (keep record for invoice history)
+    // Clear all data and deactivate (keep record ID for invoice history)
     await config.update({
+      cuit: '',
+      razonSocial: '',
+      domicilioFiscal: '',
+      condicionFiscal: 'monotributista',
+      inicioActividades: null,
       encryptedCert: '',
       encryptedKey: '',
       certExpiration: null,
       isActive: false,
       isVerified: false,
       lastTestResult: null,
+      lastTestedAt: null,
       updatedById: req.user.id
     });
 
