@@ -85,6 +85,49 @@ app.get('/health', (req, res) => {
   });
 });
 
+// TEMPORARY: Cleanup test data endpoint (remove after use)
+app.delete('/api/cleanup-test-data', async (req, res) => {
+  const secretKey = req.headers['x-cleanup-key'];
+  if (secretKey !== 'CLEANUP_2024_TEMP') {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  try {
+    const results = [];
+    const queries = [
+      { name: 'invoices', sql: 'DELETE FROM invoices' },
+      { name: 'booking_consumptions', sql: 'DELETE FROM booking_consumptions' },
+      { name: 'booking_payments', sql: 'DELETE FROM booking_payments' },
+      { name: 'reviews', sql: 'DELETE FROM reviews' },
+      { name: 'split_payment_participants', sql: 'DELETE FROM split_payment_participants' },
+      { name: 'split_payments', sql: 'DELETE FROM split_payments' },
+      { name: 'bookings', sql: 'DELETE FROM bookings' },
+      { name: 'recurring_booking_groups', sql: 'DELETE FROM recurring_booking_groups' },
+      { name: 'order_payments', sql: 'DELETE FROM order_payments' },
+      { name: 'order_items', sql: 'DELETE FROM order_items' },
+      { name: 'orders', sql: 'DELETE FROM orders' },
+      { name: 'cash_register_movements', sql: 'DELETE FROM cash_register_movements' },
+      { name: 'cash_registers', sql: 'DELETE FROM cash_registers' },
+      { name: 'client_debts', sql: 'DELETE FROM client_debts' },
+      { name: 'payments', sql: 'DELETE FROM payments' },
+      { name: 'coupon_usages', sql: 'DELETE FROM coupon_usages' },
+    ];
+
+    for (const query of queries) {
+      try {
+        const [, metadata] = await sequelize.query(query.sql);
+        results.push({ table: query.name, deleted: metadata?.rowCount || 0 });
+      } catch (err) {
+        results.push({ table: query.name, error: err.message });
+      }
+    }
+
+    res.json({ success: true, results, preserved: ['establishments', 'courts', 'products', 'stock', 'config'] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
