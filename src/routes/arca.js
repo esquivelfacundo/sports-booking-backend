@@ -229,37 +229,47 @@ router.put('/config/:establishmentId/activate', authenticateToken, async (req, r
 
 /**
  * DELETE /api/arca/config/:establishmentId
- * Delete AFIP configuration completely (disconnect)
+ * Disconnect AFIP configuration (clear sensitive data, keep history)
  */
 router.delete('/config/:establishmentId', authenticateToken, async (req, res) => {
   try {
     const { establishmentId } = req.params;
 
-    // First delete all puntos de venta
-    await EstablishmentAfipPuntoVenta.destroy({
+    const config = await EstablishmentAfipConfig.findOne({
       where: { establishmentId }
     });
 
-    // Then delete the config
-    const deleted = await EstablishmentAfipConfig.destroy({
-      where: { establishmentId }
-    });
-
-    if (!deleted) {
+    if (!config) {
       return res.status(404).json({ error: 'Configuración no encontrada' });
     }
+
+    // Clear sensitive data and deactivate (keep record for invoice history)
+    await config.update({
+      encryptedCert: null,
+      encryptedKey: null,
+      isActive: false,
+      isVerified: false,
+      lastTestResult: null,
+      updatedById: req.user.id
+    });
+
+    // Deactivate all puntos de venta (don't delete - needed for invoice history)
+    await EstablishmentAfipPuntoVenta.update(
+      { isActive: false },
+      { where: { establishmentId } }
+    );
 
     // Invalidate cache
     ArcaFactory.invalidateCache(establishmentId);
 
     res.json({
       success: true,
-      message: 'Configuración AFIP eliminada exitosamente'
+      message: 'Configuración AFIP desconectada. Puede configurar una nueva cuenta.'
     });
 
   } catch (error) {
-    console.error('[ARCA] Error deleting config:', error);
-    res.status(500).json({ error: 'Error al eliminar la configuración AFIP' });
+    console.error('[ARCA] Error disconnecting config:', error);
+    res.status(500).json({ error: 'Error al desconectar la configuración AFIP' });
   }
 });
 
