@@ -207,10 +207,13 @@ const createBooking = async (req, res) => {
       const checkInCode = crypto.randomBytes(3).toString('hex').toUpperCase();
       const reviewToken = crypto.randomBytes(32).toString('hex');
       
+      // Only set createdBy if user is not staff (staff IDs are in establishment_staff, not users table)
+      const createdByUserId = isStaff ? null : (req.user?.id || null);
+      
       const booking = await Booking.create({
         userId: bookingUserId,
         createdByStaffId: staffId,
-        createdBy: req.user?.id || null, // Track which user created the booking (null if self-service)
+        createdBy: createdByUserId, // Track which user created the booking (null if staff or self-service)
         establishmentId: establishment.id,
         courtId: courtId || null,
         amenityId: amenityId || null,
