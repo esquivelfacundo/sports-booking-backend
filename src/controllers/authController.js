@@ -107,6 +107,12 @@ const login = async (req, res) => {
       delete userResponse.passwordResetToken;
       delete userResponse.passwordResetExpires;
 
+      // Check if user is staff (has establishmentId and staffRole)
+      if (user.establishmentId && user.staffRole) {
+        userResponse.isStaff = true;
+        userResponse.allowedSections = user.allowedSections || ['reservas','canchas','clientes','resenas','marketing','cupones','ventas','gastos','stock','cuentas','analytics','finanzas','integraciones','caja','configuracion'];
+      }
+
       return res.json({
         message: 'Login successful',
         user: userResponse,
