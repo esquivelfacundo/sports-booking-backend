@@ -47,7 +47,8 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -307,7 +308,8 @@ router.get('/export', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -415,7 +417,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -688,7 +691,8 @@ router.post('/', authenticateToken, async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ error: 'Establishment not found' });
     }
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -1033,7 +1037,8 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(order.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1124,7 +1129,8 @@ router.patch('/:id/status', authenticateToken, async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(order.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1148,7 +1154,8 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1235,7 +1242,8 @@ router.get('/sales-by-product/export', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -1324,7 +1332,8 @@ router.get('/by-payment-method/export', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

@@ -18,10 +18,12 @@ router.get('/booking/:bookingId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Check access
+    // Check access - allow booking owner, establishment owner, superadmin, or staff of the establishment
+    const isStaff = req.user.isStaff && req.user.establishmentId === booking.establishmentId;
     if (booking.userId !== req.user.id && 
         booking.establishment.userId !== req.user.id && 
-        req.user.userType !== 'superadmin') {
+        req.user.userType !== 'superadmin' &&
+        !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -91,8 +93,9 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Check access
-    if (booking.establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    // Check access - allow establishment owner, superadmin, or staff of the establishment
+    const isStaff = req.user.isStaff && req.user.establishmentId === booking.establishmentId;
+    if (booking.establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -211,8 +214,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
       include: [{ model: Establishment, as: 'establishment' }]
     });
 
-    // Check access
-    if (booking.establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    // Check access - allow establishment owner, superadmin, or staff of the establishment
+    const isStaff = req.user.isStaff && req.user.establishmentId === booking.establishmentId;
+    if (booking.establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -300,8 +304,9 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       include: [{ model: Establishment, as: 'establishment' }]
     });
 
-    // Check access
-    if (booking.establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    // Check access - allow establishment owner, superadmin, or staff of the establishment
+    const isStaff = req.user.isStaff && req.user.establishmentId === booking.establishmentId;
+    if (booking.establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

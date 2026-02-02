@@ -21,7 +21,9 @@ router.get('/', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    // Allow establishment owner, superadmin, or staff
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -91,7 +93,9 @@ router.get('/export', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    // Allow establishment owner, superadmin, or staff
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -177,9 +181,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(product.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === product.establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -210,13 +215,14 @@ router.post('/', authenticateToken, async (req, res) => {
       trackStock
     } = req.body;
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(establishmentId);
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -284,9 +290,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(product.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === product.establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -361,13 +368,14 @@ router.post('/bulk-delete', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'productIds array is required' });
     }
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(establishmentId);
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -401,9 +409,10 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(product.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === product.establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -426,13 +435,14 @@ router.get('/alerts/low-stock', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'establishmentId is required' });
     }
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(establishmentId);
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -518,13 +528,14 @@ router.post('/import', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'products array is required' });
     }
 
-    // Verify access
+    // Verify access - allow establishment owner, superadmin, or staff
     const establishment = await Establishment.findByPk(establishmentId);
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -671,7 +682,9 @@ router.get('/alerts/low-stock/export', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    // Allow establishment owner, superadmin, or staff
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

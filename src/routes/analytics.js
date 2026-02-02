@@ -34,7 +34,8 @@ router.get('/court-occupancy/export', async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -112,7 +113,8 @@ router.get('/top-clients/export', async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -173,7 +175,8 @@ router.get('/by-weekday/export', async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -251,7 +254,8 @@ router.get('/revenue-by-court/export', async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -339,7 +343,8 @@ router.get('/peak-hours/export', async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
