@@ -447,7 +447,7 @@ router.post('/', authenticateToken, async (req, res) => {
           method: initialPayment.method,
           playerName: clientName || 'Turno Fijo',
           paidAt: new Date(),
-          registeredBy: req.user.id
+          registeredBy: createdByUserId // Use null for staff users (their IDs are not in users table)
         }, { transaction });
       }
     }
@@ -552,13 +552,16 @@ router.post('/:groupId/pay', authenticateToken, async (req, res) => {
     }, { transaction });
     
     // Create payment record
+    // Only set registeredBy if user is not staff (staff IDs are in establishment_staff table, not users)
+    const registeredByUserId = req.user.isStaff ? null : req.user.id;
+    
     await BookingPayment.create({
       bookingId: bookingToPay.id,
       amount: paymentAmount,
       method,
       playerName: group.clientName || 'Turno Fijo',
       paidAt: new Date(),
-      registeredBy: req.user.id
+      registeredBy: registeredByUserId
     }, { transaction });
     
     // Update group totals
