@@ -15,9 +15,9 @@ module.exports = (sequelize, DataTypes) => {
     },
     createdByStaffId: {
       type: DataTypes.UUID,
-      allowNull: true, // Set when booking is created by staff
+      allowNull: true, // Set when booking is created by staff (now references users table)
       references: {
-        model: 'establishment_staff',
+        model: 'users',
         key: 'id'
       }
     },

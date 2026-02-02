@@ -265,11 +265,11 @@ const defineAssociations = () => {
   // CurrentAccount associations
   CurrentAccount.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
   CurrentAccount.belongsTo(Client, { foreignKey: 'clientId', as: 'client' });
-  CurrentAccount.belongsTo(EstablishmentStaff, { foreignKey: 'staffId', as: 'staff' });
+  CurrentAccount.belongsTo(User, { foreignKey: 'staffId', as: 'staff' });
   CurrentAccount.hasMany(CurrentAccountMovement, { foreignKey: 'currentAccountId', as: 'movements' });
   Establishment.hasMany(CurrentAccount, { foreignKey: 'establishmentId', as: 'currentAccounts' });
   Client.hasOne(CurrentAccount, { foreignKey: 'clientId', as: 'currentAccount' });
-  EstablishmentStaff.hasOne(CurrentAccount, { foreignKey: 'staffId', as: 'currentAccount' });
+  User.hasOne(CurrentAccount, { foreignKey: 'staffId', as: 'staffCurrentAccount' });
 
   // CurrentAccountMovement associations
   CurrentAccountMovement.belongsTo(CurrentAccount, { foreignKey: 'currentAccountId', as: 'currentAccount' });

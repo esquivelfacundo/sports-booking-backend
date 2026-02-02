@@ -26,10 +26,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.UUID,
       allowNull: true,
       references: {
-        model: 'establishment_staff',
+        model: 'users',
         key: 'id'
       },
-      comment: 'Staff que abrió la caja'
+      comment: 'Staff que abrió la caja (now references users table)'
     },
     openedAt: {
       type: DataTypes.DATE,
