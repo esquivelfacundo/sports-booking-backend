@@ -823,6 +823,20 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
       order: [['sortOrder', 'ASC']]
     });
 
+    // Helper to normalize payment method codes
+    const normalizePaymentMethod = (method) => {
+      const methodMap = {
+        'efectivo': 'cash',
+        'transferencia': 'transfer',
+        'tarjeta': 'card',
+        'mercadopago': 'mercadopago',
+        'cash': 'cash',
+        'transfer': 'transfer',
+        'card': 'card'
+      };
+      return methodMap[method?.toLowerCase()] || method || 'cash';
+    };
+
     // Create a map to store sales by product and payment method
     const salesByProduct = {};
 
@@ -854,7 +868,7 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
           const itemProportion = orderTotal > 0 ? itemTotal / orderTotal : 0;
 
           orderPayments.forEach(payment => {
-            const method = payment.paymentMethod;
+            const method = normalizePaymentMethod(payment.paymentMethod);
             const paymentAmount = parseFloat(payment.amount || 0);
             const itemPaymentAmount = paymentAmount * itemProportion;
 
@@ -865,7 +879,7 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
           });
         } else {
           // If no payments, use the order's paymentMethod
-          const method = order.paymentMethod || 'pending';
+          const method = normalizePaymentMethod(order.paymentMethod || 'cash');
           if (!salesByProduct[productId].byPaymentMethod[method]) {
             salesByProduct[productId].byPaymentMethod[method] = 0;
           }
@@ -893,8 +907,9 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
       salesByProduct[productId].totalQuantity += consumption.quantity || 1;
       salesByProduct[productId].totalAmount += itemTotal;
 
-      // For booking consumptions, use the booking's deposit method or 'cash' as default
-      const method = consumption.booking?.depositMethod || 'cash';
+      // For booking consumptions, normalize payment method to match PaymentMethod codes
+      const rawMethod = consumption.booking?.depositMethod || 'cash';
+      const method = normalizePaymentMethod(rawMethod);
       if (!salesByProduct[productId].byPaymentMethod[method]) {
         salesByProduct[productId].byPaymentMethod[method] = 0;
       }
