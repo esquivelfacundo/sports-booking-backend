@@ -553,14 +553,16 @@ const updateBooking = async (req, res) => {
         updateData.cancellationReason = req.body.cancellationReason;
       } else if (status === 'completed') {
         updateData.completedAt = new Date();
-        updateData.completedBy = req.user?.id || null;
+        // Only set completedBy if user is not staff (staff IDs are not in users table)
+        updateData.completedBy = isStaff ? null : (req.user?.id || null);
         // Generate review token for completed bookings
         if (!booking.reviewToken) {
           updateData.reviewToken = crypto.randomBytes(32).toString('hex');
         }
       } else if (status === 'in_progress') {
         updateData.startedAt = new Date();
-        updateData.startedBy = req.user?.id || null;
+        // Only set startedBy if user is not staff (staff IDs are not in users table)
+        updateData.startedBy = isStaff ? null : (req.user?.id || null);
         
         // Create Order when booking starts (if not already exists)
         const existingOrder = await Order.findOne({
@@ -574,6 +576,9 @@ const updateBooking = async (req, res) => {
           });
           const orderNumber = `ORD-${String(orderCount + 1).padStart(6, '0')}`;
           
+          // Only set createdBy if user is not staff (staff IDs are not in users table)
+          const orderCreatedBy = isStaff ? null : userId;
+          
           await Order.create({
             orderNumber,
             establishmentId: booking.court.establishmentId,
@@ -584,7 +589,7 @@ const updateBooking = async (req, res) => {
             status: 'pending',
             subtotal: 0,
             total: 0,
-            createdBy: userId,
+            createdBy: orderCreatedBy,
             notes: `Turno ${booking.court.name} - ${booking.date} ${booking.startTime}`
           });
           console.log(`Order created for booking ${booking.id} on status change to in_progress`);
