@@ -372,6 +372,9 @@ router.post('/', authenticateToken, async (req, res) => {
     const endDate = lastBooking.date;
     
     // Create the recurring booking group
+    // Only set createdBy if user is not staff (staff IDs are in establishment_staff table, not users)
+    const createdByUserId = req.user.isStaff ? null : req.user.id;
+    
     const group = await RecurringBookingGroup.create({
       establishmentId,
       clientId: clientId || null,
@@ -390,7 +393,7 @@ router.post('/', authenticateToken, async (req, res) => {
       startDate,
       endDate,
       notes,
-      createdBy: req.user.id,
+      createdBy: createdByUserId,
       // If advance_one policy, first booking is paid
       paidBookingsCount: establishment.recurringPaymentPolicy === 'advance_one' && initialPayment.amount >= pricePerBooking ? 1 : 0,
       totalPaid: initialPayment.amount || 0
