@@ -91,7 +91,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     createdBy: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true, // Allow null for staff users (their IDs are in establishment_staff, not users)
       field: 'createdBy'
     },
     invoiceId: {
