@@ -190,6 +190,30 @@ class NotaCreditoService {
       const fechaHoy = this.formatDate(new Date());
       const total = parseFloat(datos.total);
 
+      // Calculate IVA based on credit note type (same logic as invoice)
+      const isNotaCreditoC = tipoComprobante === INVOICE_TYPES.NC_C;
+      
+      let impNeto, impIVA, ivaArray;
+      
+      if (isNotaCreditoC) {
+        // Monotributista - no IVA discrimination
+        impNeto = total;
+        impIVA = 0;
+        ivaArray = null;
+      } else {
+        // Responsable Inscripto (NC A/B) - must discriminate IVA 21%
+        impNeto = Math.round((total / 1.21) * 100) / 100;
+        impIVA = Math.round((total - impNeto) * 100) / 100;
+        
+        ivaArray = {
+          AlicIva: [{
+            Id: 5, // 5 = 21%
+            BaseImp: impNeto,
+            Importe: impIVA
+          }]
+        };
+      }
+
       // Build credit note request
       const comprobante = {
         Concepto: 1,
@@ -200,9 +224,9 @@ class NotaCreditoService {
         CbteFch: fechaHoy,
         ImpTotal: total,
         ImpTotConc: 0,
-        ImpNeto: total,
+        ImpNeto: impNeto,
         ImpOpEx: 0,
-        ImpIVA: 0,
+        ImpIVA: impIVA,
         ImpTrib: 0,
         MonId: 'PES',
         MonCotiz: 1,
@@ -217,6 +241,11 @@ class NotaCreditoService {
           }
         }
       };
+
+      // Add IVA array for NC A/B
+      if (ivaArray) {
+        comprobante.Iva = ivaArray;
+      }
 
       const params = {
         Auth: {
@@ -282,8 +311,8 @@ class NotaCreditoService {
             puntoVenta: this.puntoVenta,
             fechaEmision: fechaHoy,
             importeTotal: total,
-            importeNeto: total,
-            importeIva: 0,
+            importeNeto: impNeto,
+            importeIva: impIVA,
             cliente: {
               nombre: facturaOriginal.clienteNombre,
               docTipo: facturaOriginal.clienteDocTipo,

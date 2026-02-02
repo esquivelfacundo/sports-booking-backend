@@ -266,7 +266,34 @@ class WSFEService {
         throw new Error('Factura A requiere CUIT del receptor');
       }
 
-      // Build invoice request
+      // Build invoice request - calculate IVA for Factura A/B
+      const isFacturaC = tipoComprobante === INVOICE_TYPES.FACTURA_C;
+      
+      // For Factura C (Monotributista): ImpNeto = total, ImpIVA = 0, no Iva array
+      // For Factura A/B (Resp. Inscripto): Must discriminate IVA 21%
+      let impNeto, impIVA, ivaArray;
+      
+      if (isFacturaC) {
+        // Monotributista - no IVA discrimination
+        impNeto = total;
+        impIVA = 0;
+        ivaArray = null;
+      } else {
+        // Responsable Inscripto - must discriminate IVA 21%
+        // Total includes IVA, so: total = neto * 1.21
+        impNeto = Math.round((total / 1.21) * 100) / 100; // Round to 2 decimals
+        impIVA = Math.round((total - impNeto) * 100) / 100;
+        
+        // AFIP requires Iva array when ImpIVA > 0
+        ivaArray = {
+          AlicIva: [{
+            Id: 5, // 5 = 21%
+            BaseImp: impNeto,
+            Importe: impIVA
+          }]
+        };
+      }
+
       const comprobante = {
         Concepto: 1, // 1 = Products
         DocTipo: docTipo,
@@ -276,16 +303,18 @@ class WSFEService {
         CbteFch: fechaHoy,
         ImpTotal: total,
         ImpTotConc: 0, // No taxable amount
-        ImpNeto: total, // Net (for C invoices, same as total)
+        ImpNeto: impNeto,
         ImpOpEx: 0, // Exempt
-        ImpIVA: 0, // IVA (for C invoices = 0)
+        ImpIVA: impIVA,
         ImpTrib: 0, // Other taxes
         MonId: 'PES', // Currency: Pesos
         MonCotiz: 1 // Exchange rate
       };
 
-      // For Factura A/B with IVA, we'd need to add IVA array
-      // For now, we're handling basic cases (Factura C and B without IVA discrimination)
+      // Add IVA array for Factura A/B
+      if (ivaArray) {
+        comprobante.Iva = ivaArray;
+      }
 
       const params = {
         Auth: {
@@ -355,8 +384,8 @@ class WSFEService {
             puntoVenta: this.puntoVenta,
             fechaEmision: fechaHoy,
             importeTotal: total,
-            importeNeto: total,
-            importeIva: 0,
+            importeNeto: impNeto,
+            importeIva: impIVA,
             cliente: {
               nombre: datos.cliente?.nombre || 'Consumidor Final',
               docTipo,
