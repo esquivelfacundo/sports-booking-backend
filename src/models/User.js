@@ -105,6 +105,28 @@ module.exports = (sequelize, DataTypes) => {
     avatar: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    // Staff fields (for establishment employees)
+    establishmentId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'establishments',
+        key: 'id'
+      }
+    },
+    staffRole: {
+      type: DataTypes.ENUM('admin', 'employee'),
+      allowNull: true
+    },
+    allowedSections: {
+      type: DataTypes.ARRAY(DataTypes.TEXT),
+      allowNull: true,
+      defaultValue: null
+    },
+    migratedFromStaffId: {
+      type: DataTypes.UUID,
+      allowNull: true
     }
   }, {
     tableName: 'users',

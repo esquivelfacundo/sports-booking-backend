@@ -1,47 +1,17 @@
-const { EstablishmentStaff, Establishment, User } = require('../models');
+const { User, Establishment } = require('../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
-// Default permissions by role
-const DEFAULT_PERMISSIONS = {
-  admin: {
-    bookings: { view: true, create: true, edit: true, delete: true },
-    finance: { view: true, create: true, edit: true },
-    analytics: { view: true },
-    clients: { view: true, create: true, edit: true, delete: true },
-    courts: { view: true, create: true, edit: true, delete: true },
-    staff: { view: true, create: true, edit: true, delete: true },
-    settings: { view: true, edit: true }
-  },
-  manager: {
-    bookings: { view: true, create: true, edit: true, delete: true },
-    finance: { view: true, create: false, edit: false },
-    analytics: { view: true },
-    clients: { view: true, create: true, edit: true, delete: false },
-    courts: { view: true, create: false, edit: false, delete: false },
-    staff: { view: true, create: false, edit: false, delete: false },
-    settings: { view: true, edit: false }
-  },
-  receptionist: {
-    bookings: { view: true, create: true, edit: true, delete: false },
-    finance: { view: false, create: false, edit: false },
-    analytics: { view: false },
-    clients: { view: true, create: true, edit: true, delete: false },
-    courts: { view: true, create: false, edit: false, delete: false },
-    staff: { view: false, create: false, edit: false, delete: false },
-    settings: { view: false, edit: false }
-  },
-  staff: {
-    bookings: { view: true, create: false, edit: false, delete: false },
-    finance: { view: false, create: false, edit: false },
-    analytics: { view: false },
-    clients: { view: true, create: false, edit: false, delete: false },
-    courts: { view: true, create: false, edit: false, delete: false },
-    staff: { view: false, create: false, edit: false, delete: false },
-    settings: { view: false, edit: false }
-  }
-};
+// All configurable sections
+const ALL_SECTIONS = [
+  'reservas', 'canchas', 'clientes', 'resenas', 'marketing', 'cupones',
+  'ventas', 'gastos', 'stock', 'cuentas', 'analytics', 'finanzas',
+  'integraciones', 'caja', 'configuracion'
+];
+
+// Always visible sections (not configurable)
+const ALWAYS_VISIBLE = ['dashboard', 'perfil'];
 
 /**
  * Get all staff members for an establishment
@@ -50,22 +20,34 @@ const getStaff = async (req, res) => {
   try {
     const { establishmentId } = req.params;
 
-    const staff = await EstablishmentStaff.findAll({
-      where: { establishmentId },
-      attributes: { exclude: ['password'] },
+    const staff = await User.findAll({
+      where: { 
+        establishmentId,
+        staffRole: { [Op.ne]: null }
+      },
+      attributes: { exclude: ['password', 'passwordResetToken', 'passwordResetExpires', 'emailVerificationToken'] },
       order: [['createdAt', 'DESC']]
     });
 
     res.json({
       success: true,
-      staff
+      staff: staff.map(s => ({
+        id: s.id,
+        name: `${s.firstName} ${s.lastName}`.trim(),
+        email: s.email,
+        phone: s.phone,
+        role: s.staffRole,
+        allowedSections: s.allowedSections || ALL_SECTIONS,
+        isActive: s.isActive,
+        pin: s.pin ? '****' : null,
+        hasPin: !!s.pin,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt
+      }))
     });
   } catch (error) {
     console.error('Get staff error:', error);
-    res.status(500).json({
-      error: 'Failed to get staff',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to get staff', message: error.message });
   }
 };
 
@@ -75,9 +57,8 @@ const getStaff = async (req, res) => {
 const createStaff = async (req, res) => {
   try {
     const { establishmentId } = req.params;
-    const { name, email, phone, password, role = 'staff', permissions } = req.body;
+    const { name, email, phone, password, role = 'employee', allowedSections } = req.body;
 
-    // Validate required fields
     if (!name || !email || !password) {
       return res.status(400).json({
         error: 'Missing required fields',
@@ -85,50 +66,48 @@ const createStaff = async (req, res) => {
       });
     }
 
-    // Check if email already exists for this establishment
-    const existingStaff = await EstablishmentStaff.findOne({
-      where: { establishmentId, email }
-    });
-
-    if (existingStaff) {
+    // Check if email already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
       return res.status(409).json({
         error: 'Email already exists',
-        message: 'Ya existe un usuario con este email en el establecimiento'
+        message: 'Ya existe un usuario con este email'
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+    const nameParts = name.split(' ');
+    const staffRole = role === 'admin' ? 'admin' : 'employee';
 
-    // Use default permissions for role if not provided
-    const staffPermissions = permissions || DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.staff;
-
-    const staff = await EstablishmentStaff.create({
-      establishmentId,
-      name,
+    const user = await User.create({
       email,
-      phone,
       password: hashedPassword,
-      role,
-      permissions: staffPermissions,
+      firstName: nameParts[0],
+      lastName: nameParts.slice(1).join(' ') || '',
+      phone,
+      userType: 'establishment',
+      establishmentId,
+      staffRole,
+      allowedSections: allowedSections || ALL_SECTIONS,
       isActive: true
     });
-
-    // Return without password
-    const staffData = staff.toJSON();
-    delete staffData.password;
 
     res.status(201).json({
       success: true,
       message: 'Usuario creado exitosamente',
-      staff: staffData
+      staff: {
+        id: user.id,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        email: user.email,
+        phone: user.phone,
+        role: user.staffRole,
+        allowedSections: user.allowedSections,
+        isActive: user.isActive
+      }
     });
   } catch (error) {
     console.error('Create staff error:', error);
-    res.status(500).json({
-      error: 'Failed to create staff',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to create staff', message: error.message });
   }
 };
 
@@ -138,70 +117,56 @@ const createStaff = async (req, res) => {
 const updateStaff = async (req, res) => {
   try {
     const { establishmentId, staffId } = req.params;
-    const { name, email, phone, password, role, permissions, isActive } = req.body;
+    const { name, email, phone, password, role, allowedSections, isActive } = req.body;
 
-    const staff = await EstablishmentStaff.findOne({
-      where: { id: staffId, establishmentId }
+    const staff = await User.findOne({
+      where: { id: staffId, establishmentId, staffRole: { [Op.ne]: null } }
     });
 
     if (!staff) {
-      return res.status(404).json({
-        error: 'Staff not found',
-        message: 'Usuario no encontrado'
-      });
+      return res.status(404).json({ error: 'Staff not found', message: 'Usuario no encontrado' });
     }
 
-    // Check if email is being changed and already exists
     if (email && email !== staff.email) {
-      const existingStaff = await EstablishmentStaff.findOne({
-        where: { establishmentId, email, id: { [Op.ne]: staffId } }
+      const existingUser = await User.findOne({
+        where: { email, id: { [Op.ne]: staffId } }
       });
-
-      if (existingStaff) {
-        return res.status(409).json({
-          error: 'Email already exists',
-          message: 'Ya existe un usuario con este email'
-        });
+      if (existingUser) {
+        return res.status(409).json({ error: 'Email already exists', message: 'Ya existe un usuario con este email' });
       }
     }
 
-    // Prepare update data
-    const updateData = {};
-    if (name !== undefined) updateData.name = name;
-    if (email !== undefined) updateData.email = email;
-    if (phone !== undefined) updateData.phone = phone;
-    if (role !== undefined) {
-      updateData.role = role;
-      // Update permissions if role changed and no custom permissions provided
-      if (!permissions) {
-        updateData.permissions = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.staff;
-      }
+    const updates = {};
+    if (name !== undefined) {
+      const nameParts = name.split(' ');
+      updates.firstName = nameParts[0];
+      updates.lastName = nameParts.slice(1).join(' ') || '';
     }
-    if (permissions !== undefined) updateData.permissions = permissions;
-    if (isActive !== undefined) updateData.isActive = isActive;
+    if (email !== undefined) updates.email = email;
+    if (phone !== undefined) updates.phone = phone;
+    if (role !== undefined) updates.staffRole = role === 'admin' ? 'admin' : 'employee';
+    if (allowedSections !== undefined) updates.allowedSections = allowedSections;
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (password) updates.password = await bcrypt.hash(password, 10);
 
-    // Hash new password if provided
-    if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
-    }
-
-    await staff.update(updateData);
-
-    // Return without password
-    const staffData = staff.toJSON();
-    delete staffData.password;
+    await staff.update(updates);
 
     res.json({
       success: true,
       message: 'Usuario actualizado exitosamente',
-      staff: staffData
+      staff: {
+        id: staff.id,
+        name: `${staff.firstName} ${staff.lastName}`.trim(),
+        email: staff.email,
+        phone: staff.phone,
+        role: staff.staffRole,
+        allowedSections: staff.allowedSections,
+        isActive: staff.isActive
+      }
     });
   } catch (error) {
     console.error('Update staff error:', error);
-    res.status(500).json({
-      error: 'Failed to update staff',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to update staff', message: error.message });
   }
 };
 
@@ -212,29 +177,19 @@ const deleteStaff = async (req, res) => {
   try {
     const { establishmentId, staffId } = req.params;
 
-    const staff = await EstablishmentStaff.findOne({
-      where: { id: staffId, establishmentId }
+    const staff = await User.findOne({
+      where: { id: staffId, establishmentId, staffRole: { [Op.ne]: null } }
     });
 
     if (!staff) {
-      return res.status(404).json({
-        error: 'Staff not found',
-        message: 'Usuario no encontrado'
-      });
+      return res.status(404).json({ error: 'Staff not found', message: 'Usuario no encontrado' });
     }
 
     await staff.destroy();
-
-    res.json({
-      success: true,
-      message: 'Usuario eliminado exitosamente'
-    });
+    res.json({ success: true, message: 'Usuario eliminado exitosamente' });
   } catch (error) {
     console.error('Delete staff error:', error);
-    res.status(500).json({
-      error: 'Failed to delete staff',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to delete staff', message: error.message });
   }
 };
 
@@ -246,246 +201,171 @@ const staffLogin = async (req, res) => {
     const { email, password, establishmentId } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        error: 'Missing credentials',
-        message: 'Email y contraseña son requeridos'
-      });
+      return res.status(400).json({ error: 'Missing credentials', message: 'Email y contraseña son requeridos' });
     }
 
-    // Find staff member
-    const whereClause = { email, isActive: true };
-    if (establishmentId) {
-      whereClause.establishmentId = establishmentId;
-    }
+    const whereClause = { 
+      email, 
+      isActive: true,
+      staffRole: { [Op.ne]: null }
+    };
+    if (establishmentId) whereClause.establishmentId = establishmentId;
 
-    const staff = await EstablishmentStaff.findOne({
+    const user = await User.findOne({
       where: whereClause,
       include: [{
         model: Establishment,
-        as: 'establishment',
+        as: 'staffEstablishment',
         attributes: ['id', 'name', 'slug']
       }]
     });
 
-    if (!staff) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Email o contraseña incorrectos'
-      });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials', message: 'Email o contraseña incorrectos' });
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, staff.password);
+    const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Email o contraseña incorrectos'
-      });
+      return res.status(401).json({ error: 'Invalid credentials', message: 'Email o contraseña incorrectos' });
     }
 
-    // Update last login
-    await staff.update({ lastLoginAt: new Date() });
+    await user.update({ lastLoginAt: new Date() });
 
-    // Generate JWT token
     const token = jwt.sign(
-      {
-        id: staff.id,
-        email: staff.email,
-        establishmentId: staff.establishmentId,
-        role: staff.role,
-        userType: 'staff',
-        permissions: staff.permissions
-      },
+      { userId: user.id },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
-
-    // Return staff data without password
-    const staffData = staff.toJSON();
-    delete staffData.password;
 
     res.json({
       success: true,
       message: 'Login exitoso',
       token,
-      staff: staffData
+      staff: {
+        id: user.id,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        email: user.email,
+        phone: user.phone,
+        role: user.staffRole,
+        allowedSections: user.allowedSections || ALL_SECTIONS,
+        isActive: user.isActive,
+        establishmentId: user.establishmentId,
+        establishment: user.staffEstablishment
+      }
     });
   } catch (error) {
     console.error('Staff login error:', error);
-    res.status(500).json({
-      error: 'Login failed',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Login failed', message: error.message });
   }
 };
 
 /**
- * Get default permissions for a role
+ * Get available sections
  */
-const getDefaultPermissions = async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      permissions: DEFAULT_PERMISSIONS
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: 'Failed to get permissions',
-      message: error.message
-    });
-  }
+const getAvailableSections = async (req, res) => {
+  res.json({
+    success: true,
+    sections: ALL_SECTIONS,
+    alwaysVisible: ALWAYS_VISIBLE
+  });
 };
 
 /**
- * Validate user PIN (works for both User and EstablishmentStaff)
+ * Validate user PIN
  */
 const validatePin = async (req, res) => {
   try {
     const { pin } = req.body;
     const userId = req.user.id;
-    const isStaff = req.user.isStaff === true;
 
     if (!pin || !/^[0-9]{4}$/.test(pin)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid PIN format',
-        message: 'El PIN debe ser de 4 dígitos'
-      });
+      return res.status(400).json({ success: false, error: 'Invalid PIN format', message: 'El PIN debe ser de 4 dígitos' });
     }
 
+    // Check if user is staff (has establishmentId and staffRole)
+    const isStaff = req.user.establishmentId && req.user.staffRole;
     let userPin;
 
     if (isStaff) {
-      const staff = await EstablishmentStaff.findByPk(userId);
-      if (!staff) {
-        return res.status(404).json({
-          success: false,
-          error: 'Staff not found',
-          message: 'Usuario no encontrado'
-        });
-      }
-      userPin = staff.pin;
+      const user = await User.findByPk(userId);
+      userPin = user?.pin;
     } else {
-      // For owners, PIN is stored in Establishment table
-      const establishment = await Establishment.findOne({
-        where: { userId }
-      });
-      
-      if (!establishment) {
-        return res.status(404).json({
-          success: false,
-          error: 'Establishment not found',
-          message: 'Establecimiento no encontrado'
-        });
-      }
-      userPin = establishment.pin;
+      // For owners, PIN is stored in Establishment
+      const establishment = await Establishment.findOne({ where: { userId } });
+      userPin = establishment?.pin;
     }
 
     if (!userPin) {
-      return res.status(400).json({
-        success: false,
-        error: 'PIN not set',
-        message: 'No tienes un PIN configurado. Configúralo en tu perfil.'
-      });
+      return res.status(400).json({ success: false, error: 'PIN not set', message: 'No tienes un PIN configurado.' });
     }
 
     if (userPin !== pin) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid PIN',
-        message: 'PIN incorrecto'
-      });
+      return res.status(401).json({ success: false, error: 'Invalid PIN', message: 'PIN incorrecto' });
     }
 
-    res.json({
-      success: true,
-      message: 'PIN válido'
-    });
+    res.json({ success: true, message: 'PIN válido' });
   } catch (error) {
     console.error('Validate PIN error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to validate PIN',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: 'Failed to validate PIN', message: error.message });
   }
 };
 
 /**
- * Get current user profile (works for both User and EstablishmentStaff)
+ * Get current user profile
  */
 const getMyProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const isStaff = req.user.isStaff === true;
+    const isStaff = req.user.establishmentId && req.user.staffRole;
 
-    // If user is staff type, find in EstablishmentStaff
-    if (isStaff) {
-      const staff = await EstablishmentStaff.findByPk(userId, {
-        attributes: { exclude: ['password'] },
-        include: [{
-          model: Establishment,
-          as: 'establishment',
-          attributes: ['id', 'name', 'logo', 'slug']
-        }]
-      });
-
-      if (!staff) {
-        return res.status(404).json({
-          success: false,
-          error: 'Staff not found'
-        });
-      }
-
-      return res.json({
-        success: true,
-        userType: 'staff',
-        profile: {
-          id: staff.id,
-          name: staff.name,
-          email: staff.email,
-          phone: staff.phone,
-          role: staff.role,
-          pin: staff.pin ? '****' : null,
-          hasPin: !!staff.pin,
-          establishment: staff.establishment
-        }
-      });
-    }
-
-    // Otherwise, find in User table (establishment owner)
     const user = await User.findByPk(userId, {
       attributes: { exclude: ['password', 'passwordResetToken', 'passwordResetExpires', 'emailVerificationToken'] }
     });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (isStaff) {
+      const establishment = await Establishment.findByPk(user.establishmentId, {
+        attributes: ['id', 'name', 'logo', 'slug']
+      });
+
+      return res.json({
+        success: true,
+        userType: 'staff',
+        profile: {
+          id: user.id,
+          name: `${user.firstName} ${user.lastName}`.trim(),
+          email: user.email,
+          phone: user.phone,
+          role: user.staffRole,
+          allowedSections: user.allowedSections || ALL_SECTIONS,
+          pin: user.pin ? '****' : null,
+          hasPin: !!user.pin,
+          establishment
+        }
       });
     }
 
-    // Get the user's establishment (including PIN for owners)
+    // Owner
     const establishment = await Establishment.findOne({
       where: { userId },
       attributes: ['id', 'name', 'logo', 'slug', 'pin']
     });
-
-    // For owners, PIN is stored in Establishment table, not User table
-    const establishmentPin = establishment?.pin;
 
     return res.json({
       success: true,
       userType: 'owner',
       profile: {
         id: user.id,
-        name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName || user.email,
+        name: `${user.firstName} ${user.lastName}`.trim(),
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
-        pin: establishmentPin ? '****' : null,
-        hasPin: !!establishmentPin,
+        pin: establishment?.pin ? '****' : null,
+        hasPin: !!establishment?.pin,
         establishment: establishment ? {
           id: establishment.id,
           name: establishment.name,
@@ -496,225 +376,98 @@ const getMyProfile = async (req, res) => {
     });
   } catch (error) {
     console.error('Get profile error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get profile',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: 'Failed to get profile', message: error.message });
   }
 };
 
 /**
- * Update current user profile (works for both User and EstablishmentStaff)
+ * Update current user profile
  */
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const isStaff = req.user.isStaff === true;
-    const { name, firstName, lastName, email, phone, currentPassword, newPassword, pin } = req.body;
+    const isStaff = req.user.establishmentId && req.user.staffRole;
+    const { name, firstName, lastName, email, phone, currentPassword, newPassword, pin, currentPin } = req.body;
 
-    // Handle staff users
-    if (isStaff) {
-      const staff = await EstablishmentStaff.findByPk(userId);
-
-      if (!staff) {
-        return res.status(404).json({
-          success: false,
-          error: 'Staff not found'
-        });
-      }
-
-      const updates = {};
-
-      // Update basic fields
-      if (name) updates.name = name;
-      if (phone !== undefined) updates.phone = phone;
-
-      // Update email (check for duplicates)
-      if (email && email !== staff.email) {
-        const existingStaff = await EstablishmentStaff.findOne({
-          where: {
-            email,
-            establishmentId: staff.establishmentId,
-            id: { [Op.ne]: userId }
-          }
-        });
-
-        if (existingStaff) {
-          return res.status(400).json({
-            success: false,
-            error: 'Email already in use',
-            message: 'Este email ya está en uso por otro usuario'
-          });
-        }
-        updates.email = email;
-      }
-
-      // Update password
-      if (newPassword) {
-        if (!currentPassword) {
-          return res.status(400).json({
-            success: false,
-            error: 'Current password required',
-            message: 'Debes ingresar tu contraseña actual para cambiarla'
-          });
-        }
-
-        const isValidPassword = await bcrypt.compare(currentPassword, staff.password);
-        if (!isValidPassword) {
-          return res.status(401).json({
-            success: false,
-            error: 'Invalid current password',
-            message: 'La contraseña actual es incorrecta'
-          });
-        }
-
-        updates.password = await bcrypt.hash(newPassword, 10);
-      }
-
-      // Update PIN - require current PIN if staff already has one
-      if (pin !== undefined) {
-        if (pin === null || pin === '') {
-          updates.pin = null;
-        } else if (/^[0-9]{4}$/.test(pin)) {
-          // If staff already has a PIN, require currentPin to change it
-          if (staff.pin && req.body.currentPin !== staff.pin) {
-            return res.status(401).json({
-              success: false,
-              error: 'Invalid current PIN',
-              message: 'El PIN actual es incorrecto'
-            });
-          }
-          updates.pin = pin;
-        } else {
-          return res.status(400).json({
-            success: false,
-            error: 'Invalid PIN format',
-            message: 'El PIN debe ser de 4 dígitos'
-          });
-        }
-      }
-
-      await staff.update(updates);
-
-      return res.json({
-        success: true,
-        message: 'Perfil actualizado correctamente'
-      });
-    }
-
-    // Handle regular users (establishment owners)
     const user = await User.findByPk(userId);
-
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // Get the user's establishment (for PIN management)
-    const establishment = await Establishment.findOne({
-      where: { userId }
-    });
+    const updates = {};
 
-    const userUpdates = {};
-    const establishmentUpdates = {};
-
-    // Update basic fields - handle both name (combined) and firstName/lastName
+    // Update name
     if (name) {
       const nameParts = name.split(' ');
-      userUpdates.firstName = nameParts[0];
-      userUpdates.lastName = nameParts.slice(1).join(' ') || '';
+      updates.firstName = nameParts[0];
+      updates.lastName = nameParts.slice(1).join(' ') || '';
     } else {
-      if (firstName) userUpdates.firstName = firstName;
-      if (lastName) userUpdates.lastName = lastName;
+      if (firstName) updates.firstName = firstName;
+      if (lastName) updates.lastName = lastName;
     }
-    if (phone !== undefined) userUpdates.phone = phone;
+    if (phone !== undefined) updates.phone = phone;
 
-    // Update email (check for duplicates)
+    // Update email
     if (email && email !== user.email) {
-      const existingUser = await User.findOne({
-        where: {
-          email,
-          id: { [Op.ne]: userId }
-        }
-      });
-
+      const existingUser = await User.findOne({ where: { email, id: { [Op.ne]: userId } } });
       if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          error: 'Email already in use',
-          message: 'Este email ya está en uso por otro usuario'
-        });
+        return res.status(400).json({ success: false, error: 'Email already in use', message: 'Este email ya está en uso' });
       }
-      userUpdates.email = email;
+      updates.email = email;
     }
 
     // Update password
     if (newPassword) {
       if (!currentPassword) {
-        return res.status(400).json({
-          success: false,
-          error: 'Current password required',
-          message: 'Debes ingresar tu contraseña actual para cambiarla'
-        });
+        return res.status(400).json({ success: false, error: 'Current password required', message: 'Debes ingresar tu contraseña actual' });
       }
-
       const isValidPassword = await bcrypt.compare(currentPassword, user.password);
       if (!isValidPassword) {
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid current password',
-          message: 'La contraseña actual es incorrecta'
-        });
+        return res.status(401).json({ success: false, error: 'Invalid current password', message: 'La contraseña actual es incorrecta' });
       }
-
-      userUpdates.password = await bcrypt.hash(newPassword, 10);
+      updates.password = await bcrypt.hash(newPassword, 10);
     }
 
-    // Update PIN - for owners, PIN is stored in Establishment table
-    if (pin !== undefined && establishment) {
-      if (pin === null || pin === '') {
-        establishmentUpdates.pin = null;
-      } else if (/^[0-9]{4}$/.test(pin)) {
-        // If establishment already has a PIN, require currentPin to change it
-        if (establishment.pin && req.body.currentPin !== establishment.pin) {
-          return res.status(401).json({
-            success: false,
-            error: 'Invalid current PIN',
-            message: 'El PIN actual es incorrecto'
-          });
+    // Update PIN
+    if (pin !== undefined) {
+      if (isStaff) {
+        // Staff PIN stored in user
+        if (pin === null || pin === '') {
+          updates.pin = null;
+        } else if (/^[0-9]{4}$/.test(pin)) {
+          if (user.pin && currentPin !== user.pin) {
+            return res.status(401).json({ success: false, error: 'Invalid current PIN', message: 'El PIN actual es incorrecto' });
+          }
+          updates.pin = pin;
+        } else {
+          return res.status(400).json({ success: false, error: 'Invalid PIN format', message: 'El PIN debe ser de 4 dígitos' });
         }
-        establishmentUpdates.pin = pin;
       } else {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid PIN format',
-          message: 'El PIN debe ser de 4 dígitos'
-        });
+        // Owner PIN stored in establishment
+        const establishment = await Establishment.findOne({ where: { userId } });
+        if (establishment) {
+          if (pin === null || pin === '') {
+            await establishment.update({ pin: null });
+          } else if (/^[0-9]{4}$/.test(pin)) {
+            if (establishment.pin && currentPin !== establishment.pin) {
+              return res.status(401).json({ success: false, error: 'Invalid current PIN', message: 'El PIN actual es incorrecto' });
+            }
+            await establishment.update({ pin });
+          } else {
+            return res.status(400).json({ success: false, error: 'Invalid PIN format', message: 'El PIN debe ser de 4 dígitos' });
+          }
+        }
       }
     }
 
-    // Apply updates
-    if (Object.keys(userUpdates).length > 0) {
-      await user.update(userUpdates);
-    }
-    if (Object.keys(establishmentUpdates).length > 0 && establishment) {
-      await establishment.update(establishmentUpdates);
+    if (Object.keys(updates).length > 0) {
+      await user.update(updates);
     }
 
-    res.json({
-      success: true,
-      message: 'Perfil actualizado correctamente'
-    });
+    res.json({ success: true, message: 'Perfil actualizado correctamente' });
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update profile',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: 'Failed to update profile', message: error.message });
   }
 };
 
@@ -724,9 +477,11 @@ module.exports = {
   updateStaff,
   deleteStaff,
   staffLogin,
-  getDefaultPermissions,
+  getAvailableSections,
+  getDefaultPermissions: getAvailableSections,
   validatePin,
   getMyProfile,
   updateMyProfile,
-  DEFAULT_PERMISSIONS
+  ALL_SECTIONS,
+  ALWAYS_VISIBLE
 };

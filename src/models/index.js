@@ -51,6 +51,8 @@ const Invoice = require('./Invoice')(sequelize, DataTypes);
 const defineAssociations = () => {
   // User associations
   User.hasMany(Establishment, { foreignKey: 'userId', as: 'establishments' });
+  User.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'staffEstablishment' });
+  Establishment.hasMany(User, { foreignKey: 'establishmentId', as: 'staffUsers' });
   User.hasMany(Booking, { foreignKey: 'userId', as: 'bookings' });
   User.hasMany(Payment, { foreignKey: 'userId', as: 'payments' });
   User.hasMany(Review, { foreignKey: 'userId', as: 'reviews' });

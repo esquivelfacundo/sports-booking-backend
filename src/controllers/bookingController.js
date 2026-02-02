@@ -199,16 +199,16 @@ const createBooking = async (req, res) => {
     const createdBookings = [];
     
     // For staff-created bookings, don't set userId (it's a guest booking)
-    // Staff users are in establishment_staff table, not users table
+    // Staff users are now in the unified users table
     const bookingUserId = isStaff ? null : userId;
-    const staffId = isStaff ? userId : null; // Track which staff created the booking
+    const staffId = isStaff ? userId : null; // Track which staff created the booking (legacy field)
     
     for (const bookingDate of bookingDates) {
       const checkInCode = crypto.randomBytes(3).toString('hex').toUpperCase();
       const reviewToken = crypto.randomBytes(32).toString('hex');
       
-      // Only set createdBy if user is not staff (staff IDs are in establishment_staff, not users table)
-      const createdByUserId = isStaff ? null : (req.user?.id || null);
+      // Now all users (including staff) are in the unified users table
+      const createdByUserId = req.user?.id || null;
       
       const booking = await Booking.create({
         userId: bookingUserId,
@@ -556,16 +556,16 @@ const updateBooking = async (req, res) => {
         updateData.cancellationReason = req.body.cancellationReason;
       } else if (status === 'completed') {
         updateData.completedAt = new Date();
-        // Only set completedBy if user is not staff (staff IDs are not in users table)
-        updateData.completedBy = isStaff ? null : (req.user?.id || null);
+        // All users (including staff) are now in unified users table
+        updateData.completedBy = req.user?.id || null;
         // Generate review token for completed bookings
         if (!booking.reviewToken) {
           updateData.reviewToken = crypto.randomBytes(32).toString('hex');
         }
       } else if (status === 'in_progress') {
         updateData.startedAt = new Date();
-        // Only set startedBy if user is not staff (staff IDs are not in users table)
-        updateData.startedBy = isStaff ? null : (req.user?.id || null);
+        // All users (including staff) are now in unified users table
+        updateData.startedBy = req.user?.id || null;
         
         // Create Order when booking starts (if not already exists)
         const existingOrder = await Order.findOne({
@@ -579,8 +579,8 @@ const updateBooking = async (req, res) => {
           });
           const orderNumber = `ORD-${String(orderCount + 1).padStart(6, '0')}`;
           
-          // Only set createdBy if user is not staff (staff IDs are not in users table)
-          const orderCreatedBy = isStaff ? null : userId;
+          // All users (including staff) are now in unified users table
+          const orderCreatedBy = req.user?.id || null;
           
           await Order.create({
             orderNumber,

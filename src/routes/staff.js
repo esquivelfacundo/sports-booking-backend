@@ -6,7 +6,7 @@ const {
   updateStaff,
   deleteStaff,
   staffLogin,
-  getDefaultPermissions,
+  getAvailableSections,
   validatePin,
   getMyProfile,
   updateMyProfile
@@ -17,8 +17,8 @@ const router = express.Router();
 // Public route for staff login
 router.post('/login', staffLogin);
 
-// Get default permissions (public for reference)
-router.get('/permissions', getDefaultPermissions);
+// Get available sections (public for reference)
+router.get('/sections', getAvailableSections);
 
 // Protected routes for current user (any authenticated staff)
 router.post('/validate-pin', authenticateToken, validatePin);

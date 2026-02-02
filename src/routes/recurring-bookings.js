@@ -372,8 +372,8 @@ router.post('/', authenticateToken, async (req, res) => {
     const endDate = lastBooking.date;
     
     // Create the recurring booking group
-    // Only set createdBy if user is not staff (staff IDs are in establishment_staff table, not users)
-    const createdByUserId = req.user.isStaff ? null : req.user.id;
+    // All users (including staff) are now in unified users table
+    const createdByUserId = req.user.id;
     
     const group = await RecurringBookingGroup.create({
       establishmentId,
@@ -447,7 +447,7 @@ router.post('/', authenticateToken, async (req, res) => {
           method: initialPayment.method,
           playerName: clientName || 'Turno Fijo',
           paidAt: new Date(),
-          registeredBy: createdByUserId // Use null for staff users (their IDs are not in users table)
+          registeredBy: createdByUserId // All users now in unified table
         }, { transaction });
       }
     }

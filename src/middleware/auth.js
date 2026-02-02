@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User, EstablishmentStaff } = require('../models');
+const { User } = require('../models');
 
 const authenticateToken = async (req, res, next) => {
   try {
@@ -34,45 +34,7 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Check if this is a staff token
-    if (decoded.isStaff) {
-      // Get staff from database
-      const staff = await EstablishmentStaff.findByPk(decoded.userId, {
-        attributes: { exclude: ['password'] }
-      });
-
-      if (!staff) {
-        return res.status(401).json({
-          error: 'Invalid token',
-          message: 'Staff not found'
-        });
-      }
-
-      if (!staff.isActive) {
-        return res.status(401).json({
-          error: 'Account disabled',
-          message: 'Your account has been disabled'
-        });
-      }
-
-      // Create a user-like object for staff
-      req.user = {
-        id: staff.id,
-        email: staff.email,
-        firstName: staff.name.split(' ')[0],
-        lastName: staff.name.split(' ').slice(1).join(' ') || '',
-        userType: 'establishment',
-        isStaff: true,
-        staffRole: staff.role,
-        permissions: staff.permissions,
-        establishmentId: staff.establishmentId,
-        isActive: staff.isActive
-      };
-      req.staff = staff;
-      return next();
-    }
-    
-    // Get user from database
+    // Get user from database (unified - includes staff)
     const user = await User.findByPk(decoded.userId, {
       attributes: { exclude: ['password'] }
     });
@@ -91,7 +53,13 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    // Enrich user object with staff info if applicable
+    const userData = user.toJSON();
+    if (userData.establishmentId && userData.staffRole) {
+      userData.isStaff = true;
+    }
+    
+    req.user = userData;
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
