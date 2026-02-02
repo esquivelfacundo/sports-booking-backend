@@ -769,12 +769,13 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
 
     const { Order, OrderItem, OrderPayment, Product, PaymentMethod } = require('../models');
 
-    // Get all orders in the period
+    // Get all direct sale orders in the period (for OrderItems)
     const orders = await Order.findAll({
       where: {
         establishmentId,
         createdAt: { [Op.between]: [start, end] },
-        status: { [Op.in]: ['completed', 'pending'] }
+        status: { [Op.in]: ['completed', 'pending'] },
+        orderType: 'direct_sale'
       },
       include: [
         {
@@ -796,6 +797,26 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
       ]
     });
 
+    // Get all booking consumptions in the period
+    const bookingConsumptions = await BookingConsumption.findAll({
+      where: {
+        establishmentId,
+        createdAt: { [Op.between]: [start, end] }
+      },
+      include: [
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Booking,
+          as: 'booking',
+          attributes: ['id', 'depositMethod']
+        }
+      ]
+    });
+
     // Get payment methods for the establishment
     const paymentMethods = await PaymentMethod.findAll({
       where: { establishmentId, isActive: true },
@@ -805,6 +826,7 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
     // Create a map to store sales by product and payment method
     const salesByProduct = {};
 
+    // Process direct sale order items
     orders.forEach(order => {
       const orderPayments = order.payments || [];
       
@@ -850,6 +872,33 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
           salesByProduct[productId].byPaymentMethod[method] += itemTotal;
         }
       });
+    });
+
+    // Process booking consumptions
+    bookingConsumptions.forEach(consumption => {
+      const productId = consumption.productId;
+      const productName = consumption.product?.name || consumption.productName || 'Producto';
+      
+      if (!salesByProduct[productId]) {
+        salesByProduct[productId] = {
+          productId,
+          productName,
+          totalQuantity: 0,
+          totalAmount: 0,
+          byPaymentMethod: {}
+        };
+      }
+
+      const itemTotal = parseFloat(consumption.totalPrice || 0);
+      salesByProduct[productId].totalQuantity += consumption.quantity || 1;
+      salesByProduct[productId].totalAmount += itemTotal;
+
+      // For booking consumptions, use the booking's deposit method or 'cash' as default
+      const method = consumption.booking?.depositMethod || 'cash';
+      if (!salesByProduct[productId].byPaymentMethod[method]) {
+        salesByProduct[productId].byPaymentMethod[method] = 0;
+      }
+      salesByProduct[productId].byPaymentMethod[method] += itemTotal;
     });
 
     // Convert to array and format
