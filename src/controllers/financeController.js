@@ -823,18 +823,19 @@ const getSalesByProductAndPaymentMethod = async (req, res) => {
       order: [['sortOrder', 'ASC']]
     });
 
-    // Helper to normalize payment method codes
+    // Helper to normalize payment method codes to match establishment PaymentMethod codes
     const normalizePaymentMethod = (method) => {
       const methodMap = {
-        'efectivo': 'cash',
-        'transferencia': 'transfer',
-        'tarjeta': 'card',
-        'mercadopago': 'mercadopago',
-        'cash': 'cash',
-        'transfer': 'transfer',
-        'card': 'card'
+        'cash': 'efectivo',
+        'transfer': 'transferencia',
+        'card': 'credito',
+        'mercadopago': 'transferencia',
+        'efectivo': 'efectivo',
+        'transferencia': 'transferencia',
+        'credito': 'credito',
+        'debito': 'debito'
       };
-      return methodMap[method?.toLowerCase()] || method || 'cash';
+      return methodMap[method?.toLowerCase()] || method || 'efectivo';
     };
 
     // Create a map to store sales by product and payment method
