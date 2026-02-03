@@ -6,13 +6,19 @@ const { CashRegister, CashRegisterMovement } = require('../models');
 function getPaymentMethodField(paymentMethod) {
   const methodMap = {
     'cash': 'totalCash',
+    'efectivo': 'totalCash',
     'card': 'totalCard',
+    'tarjeta': 'totalCard',
     'transfer': 'totalTransfer',
+    'transferencia': 'totalTransfer',
     'credit_card': 'totalCreditCard',
+    'credito': 'totalCreditCard',
     'debit_card': 'totalDebitCard',
-    'mercadopago': 'totalMercadoPago'
+    'debito': 'totalDebitCard',
+    'mercadopago': 'totalMercadoPago',
+    'mercado_pago': 'totalMercadoPago'
   };
-  return methodMap[paymentMethod] || 'totalOther';
+  return methodMap[paymentMethod?.toLowerCase()] || 'totalOther';
 }
 
 /**
