@@ -815,12 +815,14 @@ router.get('/facturas/:establishmentId', authenticateToken, async (req, res) => 
         {
           model: User,
           as: 'createdBy',
-          attributes: ['id', 'firstName', 'lastName']
+          attributes: ['id', 'firstName', 'lastName'],
+          required: false
         },
         {
           model: Invoice,
           as: 'comprobanteAsociado',
-          attributes: ['id', 'tipoComprobanteNombre', 'numeroComprobante', 'puntoVenta']
+          attributes: ['id', 'tipoComprobanteNombre', 'numeroComprobante', 'puntoVenta'],
+          required: false
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -839,8 +841,9 @@ router.get('/facturas/:establishmentId', authenticateToken, async (req, res) => 
     });
 
   } catch (error) {
-    console.error('[ARCA] Error listing invoices:', error);
-    res.status(500).json({ error: 'Error al obtener facturas' });
+    console.error('[ARCA] Error listing invoices:', error.message);
+    console.error('[ARCA] Error stack:', error.stack);
+    res.status(500).json({ error: 'Error al obtener facturas', details: error.message });
   }
 });
 
