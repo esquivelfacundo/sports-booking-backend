@@ -203,38 +203,71 @@ class PadronService {
 
   /**
    * Determine IVA condition from persona object
-   * AFIP returns impuesto array directly in persona
+   * ws_sr_padron_a13 doesn't always return impuesto array, so we use heuristics
    */
   determineCondicionIvaFromPersona(persona) {
+    // First check if we have impuesto array
     const impuestos = persona.impuesto || [];
-    const impuestosArr = Array.isArray(impuestos) ? impuestos : [impuestos];
+    const impuestosArr = Array.isArray(impuestos) ? impuestos : (impuestos ? [impuestos] : []);
     
     console.log(`[PADRON] Checking ${impuestosArr.length} impuestos...`);
     
-    // Log all impuestos for debugging
-    impuestosArr.forEach((imp, i) => {
-      console.log(`[PADRON]   Impuesto ${i}: id=${imp.idImpuesto}, desc=${imp.descripcionImpuesto}, estado=${imp.estado}`);
-    });
-    
-    // Check for Monotributo (id 20)
-    const tieneMonotributo = impuestosArr.some(imp => 
-      imp.idImpuesto === 20 && imp.estado === 'ACTIVO'
-    );
-    
-    if (tieneMonotributo) {
-      return {
-        code: 6,
-        name: 'Responsable Monotributo',
-        shortName: 'monotributista'
-      };
+    if (impuestosArr.length > 0) {
+      // Log all impuestos for debugging
+      impuestosArr.forEach((imp, i) => {
+        console.log(`[PADRON]   Impuesto ${i}: id=${imp.idImpuesto}, desc=${imp.descripcionImpuesto}, estado=${imp.estado}`);
+      });
+      
+      // Check for Monotributo (id 20)
+      const tieneMonotributo = impuestosArr.some(imp => 
+        imp.idImpuesto === 20 && imp.estado === 'ACTIVO'
+      );
+      
+      if (tieneMonotributo) {
+        return {
+          code: 6,
+          name: 'Responsable Monotributo',
+          shortName: 'monotributista'
+        };
+      }
+
+      // Check for IVA (id 30)
+      const tieneIVA = impuestosArr.some(imp => 
+        imp.idImpuesto === 30 && imp.estado === 'ACTIVO'
+      );
+      
+      if (tieneIVA) {
+        return {
+          code: 1,
+          name: 'IVA Responsable Inscripto',
+          shortName: 'responsable_inscripto'
+        };
+      }
+
+      // Check for IVA Exento (id 32)
+      const tieneExento = impuestosArr.some(imp => 
+        imp.idImpuesto === 32 && imp.estado === 'ACTIVO'
+      );
+      
+      if (tieneExento) {
+        return {
+          code: 4,
+          name: 'IVA Sujeto Exento',
+          shortName: 'exento'
+        };
+      }
     }
 
-    // Check for IVA (id 30)
-    const tieneIVA = impuestosArr.some(imp => 
-      imp.idImpuesto === 30 && imp.estado === 'ACTIVO'
-    );
+    // HEURISTIC: ws_sr_padron_a13 doesn't return impuesto array for all CUITs
+    // Use persona type and activity to infer IVA condition
+    console.log(`[PADRON] No impuesto array, using heuristics...`);
+    console.log(`[PADRON]   tipoPersona: ${persona.tipoPersona}`);
+    console.log(`[PADRON]   formaJuridica: ${persona.formaJuridica}`);
+    console.log(`[PADRON]   idActividadPrincipal: ${persona.idActividadPrincipal}`);
     
-    if (tieneIVA) {
+    // Persona JURIDICA (SA, SRL, etc.) with economic activity = Responsable Inscripto
+    if (persona.tipoPersona === 'JURIDICA' && persona.idActividadPrincipal) {
+      console.log(`[PADRON] Heuristic: JURIDICA with activity -> Responsable Inscripto`);
       return {
         code: 1,
         name: 'IVA Responsable Inscripto',
@@ -242,20 +275,19 @@ class PadronService {
       };
     }
 
-    // Check for IVA Exento (id 32)
-    const tieneExento = impuestosArr.some(imp => 
-      imp.idImpuesto === 32 && imp.estado === 'ACTIVO'
-    );
-    
-    if (tieneExento) {
+    // Persona FISICA with activity could be Monotributista or RI
+    // We'll default to Monotributista for individuals with activity
+    if (persona.tipoPersona === 'FISICA' && persona.idActividadPrincipal) {
+      console.log(`[PADRON] Heuristic: FISICA with activity -> Monotributista (default)`);
       return {
-        code: 4,
-        name: 'IVA Sujeto Exento',
-        shortName: 'exento'
+        code: 6,
+        name: 'Responsable Monotributo',
+        shortName: 'monotributista'
       };
     }
 
     // Default: Consumidor Final
+    console.log(`[PADRON] Heuristic: No activity -> Consumidor Final`);
     return {
       code: 5,
       name: 'Consumidor Final',
