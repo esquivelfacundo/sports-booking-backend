@@ -152,88 +152,107 @@ class PadronService {
 
   /**
    * Parse AFIP persona response
+   * Note: AFIP returns data directly in persona object, not in datosGenerales
    */
   parsePersonaResponse(persona, cuit) {
-    const datosGenerales = persona.datosGenerales || {};
-    const datosRegimenGeneral = persona.datosRegimenGeneral || {};
-    const datosMonotributo = persona.datosMonotributo || {};
-
-    // Determine IVA condition
-    let condicionIva = this.determineCondicionIva(datosRegimenGeneral, datosMonotributo);
-
-    // Build razón social
-    let razonSocial = datosGenerales.razonSocial || '';
+    console.log('[PADRON] Parsing persona response...');
+    
+    // AFIP returns data directly in persona object
+    // razonSocial for companies, apellido+nombre for individuals
+    let razonSocial = persona.razonSocial || '';
     if (!razonSocial) {
-      const apellido = datosGenerales.apellido || '';
-      const nombre = datosGenerales.nombre || '';
+      const apellido = persona.apellido || '';
+      const nombre = persona.nombre || '';
       razonSocial = apellido && nombre ? `${apellido}, ${nombre}` : (apellido || nombre || 'Sin datos');
     }
+    console.log(`[PADRON] Razón social: ${razonSocial}`);
 
-    // Build domicilio
-    const domicilioFiscal = this.buildDomicilio(datosGenerales.domicilioFiscal);
+    // Tipo persona
+    const tipoPersona = persona.tipoPersona || 'FISICA';
+    console.log(`[PADRON] Tipo persona: ${tipoPersona}`);
+
+    // Build domicilio from domicilio array
+    const domicilioFiscal = this.buildDomicilioFromArray(persona.domicilio);
+    console.log(`[PADRON] Domicilio: ${domicilioFiscal}`);
 
     // Get actividad principal
-    const actividadPrincipal = this.getActividadPrincipal(
-      datosRegimenGeneral.actividad || datosMonotributo.actividad
-    );
+    const actividadPrincipal = persona.descripcionActividadPrincipal ? {
+      codigo: persona.idActividadPrincipal,
+      descripcion: persona.descripcionActividadPrincipal
+    } : null;
+    console.log(`[PADRON] Actividad: ${actividadPrincipal?.descripcion || 'N/A'}`);
+
+    // Determine IVA condition from impuesto array
+    const condicionIva = this.determineCondicionIvaFromPersona(persona);
+    console.log(`[PADRON] Condición IVA: ${condicionIva.name}`);
 
     return {
       cuit,
       razonSocial,
-      tipoPersona: datosGenerales.tipoPersona || 'FISICA',
+      tipoPersona,
       condicionIva,
       domicilioFiscal,
-      estadoCuit: datosGenerales.estadoCUIT || 'ACTIVO',
-      fechaInscripcion: datosGenerales.fechaInscripcion || null,
+      estadoCuit: persona.estadoClave || persona.estadoCuit || 'ACTIVO',
+      fechaInscripcion: persona.fechaContratoSocial || null,
       actividadPrincipal,
+      formaJuridica: persona.formaJuridica || null,
       // Include raw data for debugging
-      _raw: {
-        datosGenerales,
-        datosRegimenGeneral: Object.keys(datosRegimenGeneral).length > 0 ? datosRegimenGeneral : null,
-        datosMonotributo: Object.keys(datosMonotributo).length > 0 ? datosMonotributo : null
-      }
+      _raw: persona
     };
   }
 
   /**
-   * Determine IVA condition from AFIP data
+   * Determine IVA condition from persona object
+   * AFIP returns impuesto array directly in persona
    */
-  determineCondicionIva(datosRegimenGeneral, datosMonotributo) {
-    // Check if monotributista (has monotributo data with active impuesto)
-    if (datosMonotributo && datosMonotributo.impuesto) {
-      const impuestos = Array.isArray(datosMonotributo.impuesto) 
-        ? datosMonotributo.impuesto 
-        : [datosMonotributo.impuesto];
-      
-      const tieneMonotributo = impuestos.some(imp => 
-        imp.idImpuesto === 20 || imp.descripcionImpuesto?.toLowerCase().includes('monotributo')
-      );
-      
-      if (tieneMonotributo) {
-        return {
-          code: 6,
-          name: 'Responsable Monotributo',
-          shortName: 'monotributista'
-        };
-      }
+  determineCondicionIvaFromPersona(persona) {
+    const impuestos = persona.impuesto || [];
+    const impuestosArr = Array.isArray(impuestos) ? impuestos : [impuestos];
+    
+    console.log(`[PADRON] Checking ${impuestosArr.length} impuestos...`);
+    
+    // Log all impuestos for debugging
+    impuestosArr.forEach((imp, i) => {
+      console.log(`[PADRON]   Impuesto ${i}: id=${imp.idImpuesto}, desc=${imp.descripcionImpuesto}, estado=${imp.estado}`);
+    });
+    
+    // Check for Monotributo (id 20)
+    const tieneMonotributo = impuestosArr.some(imp => 
+      imp.idImpuesto === 20 && imp.estado === 'ACTIVO'
+    );
+    
+    if (tieneMonotributo) {
+      return {
+        code: 6,
+        name: 'Responsable Monotributo',
+        shortName: 'monotributista'
+      };
     }
 
-    // Check for IVA inscription in régimen general
-    if (datosRegimenGeneral && datosRegimenGeneral.impuesto) {
-      const impuestos = Array.isArray(datosRegimenGeneral.impuesto) 
-        ? datosRegimenGeneral.impuesto 
-        : [datosRegimenGeneral.impuesto];
-      
-      // Look for IVA (code 30) 
-      const tieneIVA = impuestos.some(imp => imp.idImpuesto === 30);
-      
-      if (tieneIVA) {
-        return {
-          code: 1,
-          name: 'IVA Responsable Inscripto',
-          shortName: 'responsable_inscripto'
-        };
-      }
+    // Check for IVA (id 30)
+    const tieneIVA = impuestosArr.some(imp => 
+      imp.idImpuesto === 30 && imp.estado === 'ACTIVO'
+    );
+    
+    if (tieneIVA) {
+      return {
+        code: 1,
+        name: 'IVA Responsable Inscripto',
+        shortName: 'responsable_inscripto'
+      };
+    }
+
+    // Check for IVA Exento (id 32)
+    const tieneExento = impuestosArr.some(imp => 
+      imp.idImpuesto === 32 && imp.estado === 'ACTIVO'
+    );
+    
+    if (tieneExento) {
+      return {
+        code: 4,
+        name: 'IVA Sujeto Exento',
+        shortName: 'exento'
+      };
     }
 
     // Default: Consumidor Final
@@ -245,36 +264,25 @@ class PadronService {
   }
 
   /**
-   * Build domicilio string from AFIP data
+   * Build domicilio string from AFIP domicilio array
    */
-  buildDomicilio(domicilio) {
-    if (!domicilio) return null;
+  buildDomicilioFromArray(domicilios) {
+    if (!domicilios || !Array.isArray(domicilios)) return null;
+    
+    // Find FISCAL domicilio first, then LEGAL/REAL
+    const fiscal = domicilios.find(d => d.tipoDomicilio === 'FISCAL') ||
+                   domicilios.find(d => d.tipoDomicilio === 'LEGAL/REAL') ||
+                   domicilios[0];
+    
+    if (!fiscal) return null;
     
     const parts = [
-      domicilio.direccion,
-      domicilio.localidad,
-      domicilio.descripcionProvincia || domicilio.provincia,
-      domicilio.codPostal ? `CP ${domicilio.codPostal}` : null
+      fiscal.direccion,
+      fiscal.descripcionProvincia,
+      fiscal.codigoPostal ? `CP ${fiscal.codigoPostal}` : null
     ].filter(Boolean);
     
     return parts.length > 0 ? parts.join(', ') : null;
-  }
-
-  /**
-   * Get actividad principal
-   */
-  getActividadPrincipal(actividades) {
-    if (!actividades) return null;
-    
-    const acts = Array.isArray(actividades) ? actividades : [actividades];
-    const principal = acts.find(a => a.orden === 1) || acts[0];
-    
-    if (!principal) return null;
-    
-    return {
-      codigo: principal.idActividad,
-      descripcion: principal.descripcionActividad
-    };
   }
 
   /**
