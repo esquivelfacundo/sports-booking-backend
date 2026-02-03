@@ -560,76 +560,90 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Get invoice history using order.invoiceId
+    // Get ALL invoices related to this order (full traceability)
     let invoiceHistory = [];
     let invoice = null;
     let billingStatus = null;
     
     try {
-      const orderInvoiceId = orderRaw.invoiceId || orderRaw.invoice_id;
-      if (orderInvoiceId) {
-        // Get the main invoice
-        const mainInvoice = await Invoice.findByPk(orderInvoiceId, {
-          attributes: [
-            'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
-            'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-            'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'created_at'
-          ]
+      // Find all invoices (facturas) with this orderId - this includes all re-invoices
+      const allInvoices = await Invoice.findAll({
+        where: { orderId: id },
+        attributes: [
+          'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
+          'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
+          'importeTotal', 'status', 'comprobanteAsociadoId', 'motivoNc', 'created_at'
+        ],
+        order: [['created_at', 'ASC']]
+      });
+      
+      // Build timeline with invoices and their credit notes
+      for (const inv of allInvoices) {
+        const isNC = [3, 8, 13].includes(inv.tipoComprobante); // NC A, B, C
+        
+        invoiceHistory.push({
+          id: inv.id,
+          tipoComprobante: inv.tipoComprobante,
+          tipoComprobanteNombre: inv.tipoComprobanteNombre,
+          puntoVenta: inv.puntoVenta,
+          numeroComprobante: inv.numeroComprobante,
+          cae: inv.cae,
+          caeVencimiento: inv.caeVencimiento,
+          fechaEmision: inv.fechaEmision,
+          importeTotal: inv.importeTotal,
+          status: inv.status,
+          motivoNc: inv.motivoNc,
+          createdAt: inv.created_at,
+          isNotaCredito: isNC
         });
         
-        if (mainInvoice) {
-          const mainInvoiceData = {
-            id: mainInvoice.id,
-            tipoComprobante: mainInvoice.tipoComprobante,
-            tipoComprobanteNombre: mainInvoice.tipoComprobanteNombre,
-            puntoVenta: mainInvoice.puntoVenta,
-            numeroComprobante: mainInvoice.numeroComprobante,
-            cae: mainInvoice.cae,
-            caeVencimiento: mainInvoice.caeVencimiento,
-            fechaEmision: mainInvoice.fechaEmision,
-            importeTotal: mainInvoice.importeTotal,
-            status: mainInvoice.status,
-            createdAt: mainInvoice.created_at,
-            isNotaCredito: false
-          };
-          
-          invoiceHistory.push(mainInvoiceData);
-          invoice = mainInvoiceData;
-          billingStatus = 'invoiced';
-          
-          // Get any credit notes referencing this invoice
+        // If it's an invoice (not NC), also find any credit notes that reference it
+        if (!isNC) {
           const creditNotes = await Invoice.findAll({
-            where: { comprobanteAsociadoId: orderInvoiceId },
+            where: { comprobanteAsociadoId: inv.id },
             attributes: [
               'id', 'tipoComprobante', 'tipoComprobanteNombre', 'puntoVenta', 
               'numeroComprobante', 'cae', 'caeVencimiento', 'fechaEmision',
-              'importeTotal', 'status', 'motivoNc'
+              'importeTotal', 'status', 'motivoNc', 'created_at'
             ],
             order: [['created_at', 'ASC']]
           });
           
           for (const nc of creditNotes) {
-            invoiceHistory.push({
-              id: nc.id,
-              tipoComprobante: nc.tipoComprobante,
-              tipoComprobanteNombre: nc.tipoComprobanteNombre,
-              puntoVenta: nc.puntoVenta,
-              numeroComprobante: nc.numeroComprobante,
-              cae: nc.cae,
-              caeVencimiento: nc.caeVencimiento,
-              fechaEmision: nc.fechaEmision,
-              importeTotal: nc.importeTotal,
-              status: nc.status,
-              motivoNc: nc.motivoNc,
-              isNotaCredito: true
-            });
+            // Only add if not already in the list (avoid duplicates if NC also has orderId)
+            if (!invoiceHistory.find(h => h.id === nc.id)) {
+              invoiceHistory.push({
+                id: nc.id,
+                tipoComprobante: nc.tipoComprobante,
+                tipoComprobanteNombre: nc.tipoComprobanteNombre,
+                puntoVenta: nc.puntoVenta,
+                numeroComprobante: nc.numeroComprobante,
+                cae: nc.cae,
+                caeVencimiento: nc.caeVencimiento,
+                fechaEmision: nc.fechaEmision,
+                importeTotal: nc.importeTotal,
+                status: nc.status,
+                motivoNc: nc.motivoNc,
+                createdAt: nc.created_at,
+                isNotaCredito: true
+              });
+            }
           }
-          
-          // Update billing status if last item is a credit note
-          if (invoiceHistory.length > 0) {
-            const lastItem = invoiceHistory[invoiceHistory.length - 1];
-            billingStatus = lastItem.isNotaCredito ? 'credit_note' : 'invoiced';
-          }
+        }
+      }
+      
+      // Sort by creation date
+      invoiceHistory.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      
+      // Set current invoice (last non-NC) and billing status
+      if (invoiceHistory.length > 0) {
+        const lastItem = invoiceHistory[invoiceHistory.length - 1];
+        billingStatus = lastItem.isNotaCredito ? 'credit_note' : 'invoiced';
+        
+        // Current invoice is the last non-NC invoice
+        const lastInvoice = [...invoiceHistory].reverse().find(i => !i.isNotaCredito);
+        if (lastInvoice) {
+          invoice = lastInvoice;
         }
       }
     } catch (invoiceError) {

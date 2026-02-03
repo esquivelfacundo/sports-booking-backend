@@ -821,7 +821,7 @@ router.get('/facturas/:establishmentId', authenticateToken, async (req, res) => 
         {
           model: Invoice,
           as: 'comprobanteAsociado',
-          attributes: ['id', 'tipoComprobanteNombre', 'numeroComprobante', 'puntoVenta'],
+          attributes: ['id', 'tipoComprobanteNombre', 'numeroComprobante', 'puntoVenta', 'orderId', 'bookingId'],
           required: false
         }
       ],
@@ -830,8 +830,20 @@ router.get('/facturas/:establishmentId', authenticateToken, async (req, res) => 
       offset
     });
 
+    // For NC without direct orderId, get it from associated invoice
+    const enrichedInvoices = rows.map(inv => {
+      const invoice = inv.toJSON();
+      if (!invoice.orderId && invoice.comprobanteAsociado?.orderId) {
+        invoice.orderId = invoice.comprobanteAsociado.orderId;
+      }
+      if (!invoice.bookingId && invoice.comprobanteAsociado?.bookingId) {
+        invoice.bookingId = invoice.comprobanteAsociado.bookingId;
+      }
+      return invoice;
+    });
+
     res.json({
-      invoices: rows,
+      invoices: enrichedInvoices,
       pagination: {
         total: count,
         page: parseInt(page),
