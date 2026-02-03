@@ -439,6 +439,10 @@ router.put('/puntos-venta/:id', authenticateToken, async (req, res) => {
 router.get('/consultar-cuit/:establishmentId/:cuit', authenticateToken, async (req, res) => {
   try {
     const { establishmentId, cuit } = req.params;
+    
+    console.log(`\n========== [PADRON DEBUG] ==========`);
+    console.log(`[PADRON] Endpoint called: /consultar-cuit/${establishmentId}/${cuit}`);
+    console.log(`[PADRON] User: ${req.user?.id || 'unknown'}`);
 
     // Get establishment's AFIP config (needed for authentication)
     const afipConfig = await EstablishmentAfipConfig.findOne({
@@ -449,10 +453,17 @@ router.get('/consultar-cuit/:establishmentId/:cuit', authenticateToken, async (r
     });
 
     if (!afipConfig) {
+      console.log(`[PADRON] ERROR: No active AFIP config for establishment ${establishmentId}`);
       return res.status(400).json({ 
         error: 'El establecimiento no tiene configuración AFIP activa' 
       });
     }
+    
+    console.log(`[PADRON] AFIP Config found:`);
+    console.log(`  - CUIT emisor: ${afipConfig.cuit}`);
+    console.log(`  - Condición fiscal: ${afipConfig.condicionFiscal}`);
+    console.log(`  - Has cert: ${!!afipConfig.encryptedCert}`);
+    console.log(`  - Has key: ${!!afipConfig.encryptedKey}`);
 
     // Create padrón service with establishment credentials
     const padronService = new PadronService({
@@ -462,8 +473,14 @@ router.get('/consultar-cuit/:establishmentId/:cuit', authenticateToken, async (r
       encryptedKey: afipConfig.encryptedKey
     });
 
+    console.log(`[PADRON] Calling AFIP ws_sr_padron_a13 for CUIT: ${cuit}`);
+    
     // Query AFIP padrón
     const contribuyente = await padronService.consultarCuit(cuit);
+
+    console.log(`[PADRON] SUCCESS! Response:`);
+    console.log(JSON.stringify(contribuyente, null, 2));
+    console.log(`========== [PADRON DEBUG END] ==========\n`);
 
     res.json({
       success: true,
@@ -471,7 +488,9 @@ router.get('/consultar-cuit/:establishmentId/:cuit', authenticateToken, async (r
     });
 
   } catch (error) {
-    console.error('[ARCA] Error consulting CUIT:', error.message);
+    console.error(`[PADRON] ERROR:`, error.message);
+    console.error(`[PADRON] Stack:`, error.stack);
+    console.log(`========== [PADRON DEBUG END] ==========\n`);
     
     // Return specific error for not found
     if (error.message.includes('no encontrado')) {

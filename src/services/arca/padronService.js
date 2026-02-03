@@ -50,11 +50,19 @@ class PadronService {
     if (this.client) return this.client;
 
     try {
+      console.log(`[PADRON] Initializing SOAP client...`);
+      console.log(`[PADRON] WSDL URL: ${PADRON_WSDL}`);
       this.client = await soap.createClientAsync(PADRON_WSDL);
-      console.log(`[PADRON] SOAP client initialized`);
+      console.log(`[PADRON] SOAP client initialized successfully`);
+      
+      // Log available methods
+      const methods = Object.keys(this.client.describe()?.PersonaServiceA13Soap?.PersonaServiceA13Soap || {});
+      console.log(`[PADRON] Available methods: ${methods.join(', ')}`);
+      
       return this.client;
     } catch (error) {
       console.error(`[PADRON] Error initializing SOAP client:`, error.message);
+      console.error(`[PADRON] Error stack:`, error.stack);
       throw new Error(`Error conectando con AFIP Padrón: ${error.message}`);
     }
   }
@@ -85,7 +93,11 @@ class PadronService {
       const client = await this.initClient();
       
       // Get credentials for padrón service specifically
+      console.log(`[PADRON] Getting credentials for service: ${PADRON_SERVICE}`);
       const credentials = await this.wsaaService.getCredentials(PADRON_SERVICE);
+      console.log(`[PADRON] Credentials obtained:`);
+      console.log(`  - Token (first 50 chars): ${credentials.token?.substring(0, 50)}...`);
+      console.log(`  - Sign (first 50 chars): ${credentials.sign?.substring(0, 50)}...`);
 
       const params = {
         token: credentials.token,
@@ -94,16 +106,23 @@ class PadronService {
         idPersona: cuitNormalized
       };
 
-      console.log(`[PADRON] Consulting CUIT ${cuitNormalized}...`);
+      console.log(`[PADRON] SOAP Request params:`);
+      console.log(`  - cuitRepresentada: ${params.cuitRepresentada}`);
+      console.log(`  - idPersona: ${params.idPersona}`);
+      console.log(`[PADRON] Calling getPersona()...`);
 
       return new Promise((resolve, reject) => {
         client.getPersona(params, (err, result) => {
           if (err) {
             console.error(`[PADRON] SOAP error:`, err.message);
+            console.error(`[PADRON] SOAP error details:`, JSON.stringify(err, null, 2));
             return reject(new Error(`Error consultando AFIP: ${err.message}`));
           }
 
           try {
+            console.log(`[PADRON] Raw SOAP response:`);
+            console.log(JSON.stringify(result, null, 2));
+            
             const persona = result?.personaReturn?.persona;
             
             if (!persona) {
