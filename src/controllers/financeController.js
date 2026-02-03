@@ -239,10 +239,10 @@ const getFinancialSummary = async (req, res) => {
         
         // Get booking payments
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
-        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        
-        // Calculate seña (same logic as sidebar)
-        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        const depPmts = bpList.filter(p => p.paymentType === 'deposit');
+        const decPmts = bpList.filter(p => p.paymentType === 'declared');
+        const seña = depPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
+        const bpTotal = decPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
         const orderTotal = bookingTotal + consumptionsTotal;
         const orderPaid = seña + bpTotal;
@@ -305,12 +305,11 @@ const getFinancialSummary = async (req, res) => {
         const initialDeposit = parseFloat(fullBooking?.initialDeposit) || 0;
         const depositMethod = fullBooking?.depositMethod || 'sin_especificar';
         
-        // Get booking payments
+        // Get booking payments separated by type
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
-        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        
-        // Calculate seña
-        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
+        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         
         // Add seña to deposit method
         if (seña > 0) {
@@ -321,8 +320,8 @@ const getFinancialSummary = async (req, res) => {
           paymentMethods[depositMethod].amount += seña;
         }
         
-        // Add each booking payment to its method
-        for (const bp of bpList) {
+        // Add each declared payment to its method (not deposits, already counted above)
+        for (const bp of declaredPmts) {
           const bpMethod = bp.method || 'cash';
           if (!paymentMethods[bpMethod]) {
             paymentMethods[bpMethod] = { count: 0, amount: 0 };
@@ -546,10 +545,11 @@ const getFinancialSummary = async (req, res) => {
         const initialDeposit = parseFloat(fullBooking?.initialDeposit) || 0;
         
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
-        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        
-        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
-        paidAmount = seña + bpTotal;
+        const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
+        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
+        const declaredTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        paidAmount = seña + declaredTotal;
         
         bookingDate = fullBooking?.date;
         bookingTime = fullBooking?.startTime || fullBooking?.time;

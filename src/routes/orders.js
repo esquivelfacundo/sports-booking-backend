@@ -187,14 +187,12 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         // Calculate paid amount from booking payments (same logic as sidebar)
         const BookingPayment = require('../models').BookingPayment;
         const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
-        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
+        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
+        const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
-        // Seña = initialDeposit if exists, otherwise depositAmount - bookingPayments (to avoid double counting)
-        const seña = initialDeposit > 0 
-          ? initialDeposit 
-          : Math.max(0, depositAmount - bpTotal);
-        
-        // Total paid = seña + booking payments
+        // Total paid = seña + declared payments
         calculatedPaidAmount = seña + bpTotal;
         
         // Sync status with booking
@@ -1072,8 +1070,10 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
         const depositAmount = parseFloat(booking.depositAmount) || 0;
         const BookingPayment = require('../models').BookingPayment;
         const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
-        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        const seña = Math.max(0, depositAmount - bpTotal);
+        const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
+        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || parseFloat(booking.initialDeposit) || 0;
+        const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
         const opList = await OrderPayment.findAll({ where: { orderId: id }, raw: true });
         const opTotal = opList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
@@ -1204,12 +1204,12 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
         const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
         
-        // Get booking payments
+        // Get booking payments separated by type
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
-        const bpTotal = bpList.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-        
-        // Calculate seña (same logic as sidebar)
-        const seña = initialDeposit > 0 ? initialDeposit : Math.max(0, depositAmount - bpTotal);
+        const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
+        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
+        const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
         totalRevenue += bookingTotal + consumptionsTotal;
         totalPaid += seña + bpTotal;

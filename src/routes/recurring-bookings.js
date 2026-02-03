@@ -446,6 +446,7 @@ router.post('/', authenticateToken, async (req, res) => {
           amount: initialPayment.amount,
           method: initialPayment.method,
           playerName: clientName || 'Turno Fijo',
+          paymentType: 'deposit',
           paidAt: new Date(),
           registeredBy: createdByUserId // All users now in unified table
         }, { transaction });
@@ -560,6 +561,7 @@ router.post('/:groupId/pay', authenticateToken, async (req, res) => {
       amount: paymentAmount,
       method,
       playerName: group.clientName || 'Turno Fijo',
+      paymentType: 'declared',
       paidAt: new Date(),
       registeredBy: registeredByUserId
     }, { transaction });

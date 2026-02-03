@@ -39,6 +39,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'MercadoPago payment ID if applicable'
     },
+    paymentType: {
+      type: DataTypes.ENUM('deposit', 'declared'),
+      allowNull: false,
+      defaultValue: 'declared',
+      comment: 'deposit = initial deposit when booking, declared = payment declared later'
+    },
     registeredBy: {
       type: DataTypes.UUID,
       allowNull: true,

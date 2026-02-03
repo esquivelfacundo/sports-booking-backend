@@ -733,13 +733,14 @@ router.post('/:bookingId/payments', authenticateToken, async (req, res) => {
       });
     }
 
-    // Create payment record
+    // Create payment record (declared = payment from sidebar, not initial deposit)
     const payment = await BookingPayment.create({
       bookingId,
       amount: parseFloat(amount),
       method,
       playerName: playerName || null,
       notes: notes || null,
+      paymentType: 'declared',
       registeredBy: userId,
       paidAt: new Date()
     });

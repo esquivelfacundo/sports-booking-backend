@@ -255,6 +255,7 @@ const createBooking = async (req, res) => {
         method: depositMethod,
         playerName: clientName || 'Seña inicial',
         notes: 'Seña al momento de crear la reserva',
+        paymentType: 'deposit',
         registeredBy: userId,
         paidAt: new Date()
       });
