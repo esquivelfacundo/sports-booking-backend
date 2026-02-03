@@ -26,6 +26,7 @@ const {
   INVOICE_TYPE_NAMES,
   DOC_TYPES
 } = require('../services/arca');
+const PadronService = require('../services/arca/padronService');
 const { Op } = require('sequelize');
 
 // =====================================================
@@ -423,6 +424,61 @@ router.put('/puntos-venta/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[ARCA] Error updating punto de venta:', error);
     res.status(500).json({ error: 'Error al actualizar punto de venta' });
+  }
+});
+
+// =====================================================
+// PADRON (CUIT LOOKUP) ENDPOINTS
+// =====================================================
+
+/**
+ * GET /api/arca/consultar-cuit/:establishmentId/:cuit
+ * Lookup a CUIT in AFIP's padrón to get taxpayer info
+ * Returns: razón social, condición IVA, domicilio, etc.
+ */
+router.get('/consultar-cuit/:establishmentId/:cuit', authenticateToken, async (req, res) => {
+  try {
+    const { establishmentId, cuit } = req.params;
+
+    // Get establishment's AFIP config (needed for authentication)
+    const afipConfig = await EstablishmentAfipConfig.findOne({
+      where: { 
+        establishmentId,
+        isActive: true
+      }
+    });
+
+    if (!afipConfig) {
+      return res.status(400).json({ 
+        error: 'El establecimiento no tiene configuración AFIP activa' 
+      });
+    }
+
+    // Create padrón service with establishment credentials
+    const padronService = new PadronService({
+      establishmentId,
+      cuit: afipConfig.cuit,
+      encryptedCert: afipConfig.encryptedCert,
+      encryptedKey: afipConfig.encryptedKey
+    });
+
+    // Query AFIP padrón
+    const contribuyente = await padronService.consultarCuit(cuit);
+
+    res.json({
+      success: true,
+      contribuyente
+    });
+
+  } catch (error) {
+    console.error('[ARCA] Error consulting CUIT:', error.message);
+    
+    // Return specific error for not found
+    if (error.message.includes('no encontrado')) {
+      return res.status(404).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: error.message || 'Error al consultar CUIT' });
   }
 });
 

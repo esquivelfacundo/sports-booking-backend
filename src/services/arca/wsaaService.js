@@ -16,8 +16,8 @@ const { decryptCertificate } = require('./encryptionService');
 const WSAA_URL = 'https://wsaa.afip.gov.ar/ws/services/LoginCms';
 const WSFE_SERVICE = 'wsfe';
 
-// Token cache per establishment (in-memory)
-// Structure: { establishmentId: { token, sign, expiresAt, cuit } }
+// Token cache per establishment AND service (in-memory)
+// Structure: { `${establishmentId}_${service}`: { token, sign, expiresAt, cuit } }
 const tokenCache = new Map();
 
 // Token validity: 11 hours (AFIP gives 12h, we use 11h for safety margin)
@@ -43,16 +43,17 @@ class WSAAService {
    * Get cached credentials or authenticate with AFIP
    * @returns {Promise<{token: string, sign: string}>}
    */
-  async getCredentials() {
-    const cached = tokenCache.get(this.establishmentId);
+  async getCredentials(serviceName = WSFE_SERVICE) {
+    const cacheKey = `${this.establishmentId}_${serviceName}`;
+    const cached = tokenCache.get(cacheKey);
     
     if (cached && this.isTokenValid(cached)) {
-      console.log(`[WSAA] Using cached token for establishment ${this.establishmentId}`);
+      console.log(`[WSAA] Using cached token for establishment ${this.establishmentId}, service ${serviceName}`);
       return { token: cached.token, sign: cached.sign };
     }
 
-    console.log(`[WSAA] Authenticating with AFIP for establishment ${this.establishmentId}`);
-    return await this.authenticate();
+    console.log(`[WSAA] Authenticating with AFIP for establishment ${this.establishmentId}, service ${serviceName}`);
+    return await this.authenticate(serviceName);
   }
 
   /**
@@ -67,15 +68,15 @@ class WSAAService {
    * Authenticate with AFIP WSAA
    * @returns {Promise<{token: string, sign: string}>}
    */
-  async authenticate() {
+  async authenticate(serviceName = WSFE_SERVICE) {
     try {
       // Decrypt certificates
       const certPem = decryptCertificate(this.encryptedCert);
       const keyPem = decryptCertificate(this.encryptedKey);
 
       // Generate TRA (Ticket de Requerimiento de Acceso)
-      const tra = this.generateTRA();
-      console.log(`[WSAA] TRA generated for CUIT ${this.cuit}`);
+      const tra = this.generateTRA(serviceName);
+      console.log(`[WSAA] TRA generated for CUIT ${this.cuit}, service ${serviceName}`);
 
       // Sign TRA with certificate
       const cms = this.signTRA(tra, certPem, keyPem);
@@ -85,8 +86,9 @@ class WSAAService {
       const credentials = await this.callWSAA(cms);
       console.log(`[WSAA] Authentication successful, token expires at ${credentials.expiresAt}`);
 
-      // Cache credentials
-      tokenCache.set(this.establishmentId, {
+      // Cache credentials per service
+      const cacheKey = `${this.establishmentId}_${serviceName}`;
+      tokenCache.set(cacheKey, {
         token: credentials.token,
         sign: credentials.sign,
         expiresAt: credentials.expiresAt,
@@ -104,7 +106,7 @@ class WSAAService {
   /**
    * Generate TRA XML document
    */
-  generateTRA() {
+  generateTRA(serviceName = WSFE_SERVICE) {
     const now = new Date();
     const generationTime = new Date(now.getTime() - 10 * 60 * 1000); // 10 minutes ago
     const expirationTime = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes ahead
@@ -120,7 +122,7 @@ class WSAAService {
     <generationTime>${formatDate(generationTime)}</generationTime>
     <expirationTime>${formatDate(expirationTime)}</expirationTime>
   </header>
-  <service>${WSFE_SERVICE}</service>
+  <service>${serviceName}</service>
 </loginTicketRequest>`;
   }
 
