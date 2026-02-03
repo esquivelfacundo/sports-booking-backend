@@ -6,8 +6,9 @@ const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
 
-// Generate order number
+// Generate order number with establishment prefix for global uniqueness
 const generateOrderNumber = async (establishmentId) => {
+  const estPrefix = establishmentId.substring(0, 4).toUpperCase();
   const today = new Date();
   const datePrefix = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
   
@@ -24,7 +25,7 @@ const generateOrderNumber = async (establishmentId) => {
     }
   });
   
-  return `ORD-${datePrefix}-${String(count + 1).padStart(4, '0')}`;
+  return `ORD-${estPrefix}-${datePrefix}-${String(count + 1).padStart(4, '0')}`;
 };
 
 // Get all orders for establishment (with filters)

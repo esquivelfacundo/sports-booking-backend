@@ -605,7 +605,8 @@ const updateBooking = async (req, res) => {
         });
         
         if (!existingOrder) {
-          // Generate order number with date prefix (same format as orders.js)
+          // Generate order number with establishment prefix for global uniqueness
+          const estPrefix = booking.court.establishmentId.substring(0, 4).toUpperCase();
           const today = new Date();
           const datePrefix = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
           const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
@@ -617,7 +618,7 @@ const updateBooking = async (req, res) => {
               createdAt: { [Op.between]: [startOfDay, endOfDay] }
             }
           });
-          const orderNumber = `ORD-${datePrefix}-${String(orderCount + 1).padStart(4, '0')}`;
+          const orderNumber = `ORD-${estPrefix}-${datePrefix}-${String(orderCount + 1).padStart(4, '0')}`;
           
           // All users (including staff) are now in unified users table
           const orderCreatedBy = req.user?.id || null;
