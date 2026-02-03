@@ -543,6 +543,7 @@ router.get('/establishment/:establishmentId/stats',
 /**
  * GET /api/bookings/establishment/:establishmentId/count
  * Get total booking count for an establishment
+ * Only counts bookings made by players (excludes recurring/fixed bookings)
  */
 router.get('/establishment/:establishmentId/count', 
   requireRole(['establishment', 'admin']), 
@@ -550,8 +551,12 @@ router.get('/establishment/:establishmentId/count',
     try {
       const { establishmentId } = req.params;
       
+      // Only count player bookings (those without recurringGroupId = not fixed/recurring)
       const count = await Booking.count({
-        where: { establishmentId }
+        where: { 
+          establishmentId,
+          recurringGroupId: null // Exclude fixed/recurring bookings
+        }
       });
 
       res.json({
