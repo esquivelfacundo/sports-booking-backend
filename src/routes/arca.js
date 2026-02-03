@@ -825,7 +825,7 @@ router.get('/facturas/:establishmentId', authenticateToken, async (req, res) => 
           required: false
         }
       ],
-      order: [['createdAt', 'DESC']],
+      order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset
     });
