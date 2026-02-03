@@ -6,7 +6,7 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true
     },
     orderNumber: {
-      type: DataTypes.STRING(20),
+      type: DataTypes.STRING(30),
       allowNull: false,
       unique: true,
       field: 'orderNumber'
