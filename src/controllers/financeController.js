@@ -1,4 +1,4 @@
-const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product, BookingPayment, OrderItem, EstablishmentUser } = require('../models');
+const { Booking, Court, Establishment, Payment, Order, Invoice, Client, BookingConsumption, Product, BookingPayment, OrderItem, EstablishmentUser, PaymentMethod } = require('../models');
 const { Op, fn, col, literal } = require('sequelize');
 
 /**
@@ -68,6 +68,38 @@ const getFinancialSummary = async (req, res) => {
     const endStr = end.dateStr || end.toISOString().split('T')[0];
     const previousStartStr = previousStart.toISOString().split('T')[0];
     const previousEndStr = previousEnd.toISOString().split('T')[0];
+
+    // Load payment methods for this establishment to create code -> name mapping
+    const establishmentPaymentMethods = await PaymentMethod.findAll({
+      where: { establishmentId, isActive: true },
+      attributes: ['code', 'name'],
+      raw: true
+    });
+    
+    // Create code -> name mapping (use first found name for each code to handle duplicates)
+    const paymentMethodNameMap = {};
+    establishmentPaymentMethods.forEach(pm => {
+      if (!paymentMethodNameMap[pm.code]) {
+        paymentMethodNameMap[pm.code] = pm.name;
+      }
+    });
+    
+    // Helper to get payment method name from code
+    const getMethodName = (code) => {
+      if (!code) return 'Sin especificar';
+      // First try establishment's payment methods
+      if (paymentMethodNameMap[code]) return paymentMethodNameMap[code];
+      // Fallback to hardcoded labels for legacy codes
+      const fallbackLabels = {
+        'efectivo': 'Efectivo', 'cash': 'Efectivo',
+        'transferencia': 'Transferencia', 'transfer': 'Transferencia',
+        'tarjeta': 'Tarjeta', 'card': 'Tarjeta',
+        'mercadopago': 'MercadoPago',
+        'pending': 'Pendiente de Cobro', 'pendiente': 'Pendiente de Cobro',
+        'sin_especificar': 'Sin especificar'
+      };
+      return fallbackLabels[code] || code;
+    };
 
     // Get current period bookings (revenue from reservations)
     const currentBookings = await Booking.findAll({
@@ -408,7 +440,7 @@ const getFinancialSummary = async (req, res) => {
         
         // Track by payment method
         const method = b.depositMethod || 'sin_especificar';
-        const methodLabel = getPaymentMethodLabel(method);
+        const methodLabel = getMethodName(method);
         if (!revenueByPeriod[key].byPaymentMethod[methodLabel]) {
           revenueByPeriod[key].byPaymentMethod[methodLabel] = 0;
         }
@@ -427,7 +459,7 @@ const getFinancialSummary = async (req, res) => {
         
         // Track by payment method
         const method = o.paymentMethod || 'sin_especificar';
-        const methodLabel = getPaymentMethodLabel(method);
+        const methodLabel = getMethodName(method);
         if (!revenueByPeriod[key].byPaymentMethod[methodLabel]) {
           revenueByPeriod[key].byPaymentMethod[methodLabel] = 0;
         }
@@ -612,11 +644,23 @@ const getFinancialSummary = async (req, res) => {
         }
       },
       breakdown: {
-        byPaymentMethod: Object.entries(paymentMethods).map(([method, data]) => ({
-          method: getPaymentMethodLabel(method),
-          ...data,
-          percentage: totalRevenue > 0 ? Math.round((data.amount / totalRevenue) * 100) : 0
-        })),
+        byPaymentMethod: (() => {
+          // Group by resolved name to avoid duplicates (e.g., "cash" and "efectivo" both -> "Efectivo")
+          const groupedByName = {};
+          Object.entries(paymentMethods).forEach(([code, data]) => {
+            const name = getMethodName(code);
+            if (!groupedByName[name]) {
+              groupedByName[name] = { count: 0, amount: 0 };
+            }
+            groupedByName[name].count += data.count;
+            groupedByName[name].amount += data.amount;
+          });
+          return Object.entries(groupedByName).map(([method, data]) => ({
+            method,
+            ...data,
+            percentage: totalRevenue > 0 ? Math.round((data.amount / totalRevenue) * 100) : 0
+          }));
+        })(),
         byCourt: Object.entries(revenueByCourt).map(([court, data]) => ({
           court,
           ...data,
