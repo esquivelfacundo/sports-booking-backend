@@ -803,7 +803,8 @@ router.post('/:bookingId/payments', authenticateToken, async (req, res) => {
         amount: parseFloat(p.amount),
         method: p.method,
         playerName: p.playerName,
-        paidAt: p.paidAt
+        paidAt: p.paidAt,
+        paymentType: p.paymentType
       }))
     });
   } catch (error) {
@@ -841,7 +842,8 @@ router.get('/:bookingId/payments', authenticateToken, async (req, res) => {
         method: p.method,
         playerName: p.playerName,
         paidAt: p.paidAt,
-        mpPaymentId: p.mpPaymentId
+        mpPaymentId: p.mpPaymentId,
+        paymentType: p.paymentType
       }))
     });
   } catch (error) {
