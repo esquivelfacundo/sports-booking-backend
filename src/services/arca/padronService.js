@@ -1,26 +1,66 @@
 /**
- * Padrón Service - Consulta de contribuyentes
- * Usa API pública de TangoFactura para consultar datos de CUIT
+ * Padrón Service - Consulta de contribuyentes AFIP
+ * Web Service ws_sr_padron_a13 (Consulta por CUIT)
  * 
  * Permite obtener:
  * - Razón social
  * - Condición IVA (Responsable Inscripto, Monotributista, etc.)
- * - Tipo de persona (Física/Jurídica)
  * - Domicilio fiscal
- * - Actividad principal
+ * - Actividades
  */
 
-// Cache for padrón queries (to avoid excessive API calls)
+const soap = require('soap');
+const WSAAService = require('./wsaaService');
+
+// AFIP Production URL for Padrón A13
+const PADRON_WSDL = 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13?WSDL';
+const PADRON_SERVICE = 'ws_sr_padron_a13';
+
+// Cache for padrón queries
 const padronCache = new Map();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 class PadronService {
-  constructor(config = {}) {
-    this.establishmentId = config.establishmentId || 'default';
+  /**
+   * @param {Object} config - AFIP configuration
+   * @param {string} config.establishmentId
+   * @param {string} config.cuit - CUIT del establecimiento (para autenticación)
+   * @param {string} config.encryptedCert
+   * @param {string} config.encryptedKey
+   */
+  constructor(config) {
+    this.establishmentId = config.establishmentId;
+    this.cuit = config.cuit;
+    
+    // Create WSAA service for authentication
+    this.wsaaService = new WSAAService({
+      establishmentId: config.establishmentId,
+      cuit: config.cuit,
+      encryptedCert: config.encryptedCert,
+      encryptedKey: config.encryptedKey
+    });
+    
+    this.client = null;
   }
 
   /**
-   * Consultar datos de un CUIT usando API pública
+   * Initialize SOAP client
+   */
+  async initClient() {
+    if (this.client) return this.client;
+
+    try {
+      this.client = await soap.createClientAsync(PADRON_WSDL);
+      console.log(`[PADRON] SOAP client initialized`);
+      return this.client;
+    } catch (error) {
+      console.error(`[PADRON] Error initializing SOAP client:`, error.message);
+      throw new Error(`Error conectando con AFIP Padrón: ${error.message}`);
+    }
+  }
+
+  /**
+   * Consultar datos de un CUIT en el padrón de AFIP
    * @param {string} cuitConsulta - CUIT a consultar
    * @returns {Promise<Object>} Datos del contribuyente
    */
@@ -41,191 +81,181 @@ class PadronService {
       return cached.data;
     }
 
-    console.log(`[PADRON] Consulting CUIT ${cuitNormalized}...`);
-
-    // Try TangoFactura API first (most reliable)
     try {
-      const data = await this.consultarTangoFactura(cuitNormalized);
+      const client = await this.initClient();
       
-      // Cache the result
-      padronCache.set(cacheKey, { data, timestamp: Date.now() });
-      console.log(`[PADRON] Found: ${data.razonSocial} - ${data.condicionIva.name}`);
-      return data;
-    } catch (err1) {
-      console.log(`[PADRON] TangoFactura failed: ${err1.message}, trying Nosis...`);
-      
-      // Fallback to Nosis API
-      try {
-        const data = await this.consultarNosis(cuitNormalized);
-        padronCache.set(cacheKey, { data, timestamp: Date.now() });
-        console.log(`[PADRON] Found via Nosis: ${data.razonSocial}`);
-        return data;
-      } catch (err2) {
-        console.error(`[PADRON] All APIs failed`);
-        throw new Error('No se pudo consultar el CUIT. Intente nuevamente.');
-      }
-    }
-  }
+      // Get credentials for padrón service specifically
+      const credentials = await this.wsaaService.getCredentials(PADRON_SERVICE);
 
-  /**
-   * Consultar usando API de TangoFactura (JSON, confiable)
-   */
-  async consultarTangoFactura(cuit) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    try {
-      const response = await fetch(
-        `https://afip.tangofactura.com/Rest/GetContribuyenteFull?cuit=${cuit}`,
-        {
-          headers: { 'Accept': 'application/json' },
-          signal: controller.signal
-        }
-      );
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data || data.errorGetData || !data.Contribuyente) {
-        throw new Error('CUIT no encontrado');
-      }
-
-      const contrib = data.Contribuyente;
-      
-      // Build razón social
-      let razonSocial = contrib.nombre || '';
-      if (!razonSocial && contrib.apellido) {
-        razonSocial = `${contrib.apellido}, ${contrib.nombre || ''}`.trim();
-      }
-      
-      // Map condición IVA
-      const condicionIva = this.mapCondicionIva(contrib.idImpuestoIVA, contrib.monotributo);
-      
-      // Determine tipo persona
-      const tipoPersona = cuit.startsWith('30') || cuit.startsWith('33') || cuit.startsWith('34') 
-        ? 'JURIDICA' 
-        : 'FISICA';
-
-      return {
-        cuit,
-        razonSocial: razonSocial || 'Sin datos',
-        tipoPersona,
-        condicionIva,
-        domicilioFiscal: contrib.domicilioFiscal || null,
-        estadoCuit: contrib.estadoCUIT || 'ACTIVO',
-        actividadPrincipal: contrib.actividadPrincipal || null,
-        fechaInscripcion: contrib.fechaInscripcion || null,
-        // Raw data for debugging
-        _raw: contrib
+      const params = {
+        token: credentials.token,
+        sign: credentials.sign,
+        cuitRepresentada: this.cuit,
+        idPersona: cuitNormalized
       };
+
+      console.log(`[PADRON] Consulting CUIT ${cuitNormalized}...`);
+
+      return new Promise((resolve, reject) => {
+        client.getPersona(params, (err, result) => {
+          if (err) {
+            console.error(`[PADRON] SOAP error:`, err.message);
+            return reject(new Error(`Error consultando AFIP: ${err.message}`));
+          }
+
+          try {
+            const persona = result?.personaReturn?.persona;
+            
+            if (!persona) {
+              return reject(new Error('CUIT no encontrado en el padrón de AFIP'));
+            }
+
+            const data = this.parsePersonaResponse(persona, cuitNormalized);
+
+            // Cache the result
+            padronCache.set(cacheKey, { data, timestamp: Date.now() });
+
+            console.log(`[PADRON] Found: ${data.razonSocial} - ${data.condicionIva.name}`);
+            resolve(data);
+
+          } catch (parseError) {
+            console.error(`[PADRON] Error parsing response:`, parseError.message);
+            reject(new Error('Error procesando respuesta de AFIP'));
+          }
+        });
+      });
+
     } catch (error) {
-      clearTimeout(timeout);
+      console.error(`[PADRON] Error:`, error.message);
       throw error;
     }
   }
 
   /**
-   * Fallback: Nosis API
+   * Parse AFIP persona response
    */
-  async consultarNosis(cuit) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+  parsePersonaResponse(persona, cuit) {
+    const datosGenerales = persona.datosGenerales || {};
+    const datosRegimenGeneral = persona.datosRegimenGeneral || {};
+    const datosMonotributo = persona.datosMonotributo || {};
 
-    try {
-      const response = await fetch(
-        `https://api.cuitonline.com/v2/constancia/${cuit}`,
-        {
-          headers: { 
-            'Accept': 'application/json',
-            'User-Agent': 'ARCA-Integration/1.0'
-          },
-          signal: controller.signal
-        }
-      );
+    // Determine IVA condition
+    let condicionIva = this.determineCondicionIva(datosRegimenGeneral, datosMonotributo);
 
-      clearTimeout(timeout);
+    // Build razón social
+    let razonSocial = datosGenerales.razonSocial || '';
+    if (!razonSocial) {
+      const apellido = datosGenerales.apellido || '';
+      const nombre = datosGenerales.nombre || '';
+      razonSocial = apellido && nombre ? `${apellido}, ${nombre}` : (apellido || nombre || 'Sin datos');
+    }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+    // Build domicilio
+    const domicilioFiscal = this.buildDomicilio(datosGenerales.domicilioFiscal);
+
+    // Get actividad principal
+    const actividadPrincipal = this.getActividadPrincipal(
+      datosRegimenGeneral.actividad || datosMonotributo.actividad
+    );
+
+    return {
+      cuit,
+      razonSocial,
+      tipoPersona: datosGenerales.tipoPersona || 'FISICA',
+      condicionIva,
+      domicilioFiscal,
+      estadoCuit: datosGenerales.estadoCUIT || 'ACTIVO',
+      fechaInscripcion: datosGenerales.fechaInscripcion || null,
+      actividadPrincipal,
+      // Include raw data for debugging
+      _raw: {
+        datosGenerales,
+        datosRegimenGeneral: Object.keys(datosRegimenGeneral).length > 0 ? datosRegimenGeneral : null,
+        datosMonotributo: Object.keys(datosMonotributo).length > 0 ? datosMonotributo : null
       }
+    };
+  }
 
-      const data = await response.json();
+  /**
+   * Determine IVA condition from AFIP data
+   */
+  determineCondicionIva(datosRegimenGeneral, datosMonotributo) {
+    // Check if monotributista (has monotributo data with active impuesto)
+    if (datosMonotributo && datosMonotributo.impuesto) {
+      const impuestos = Array.isArray(datosMonotributo.impuesto) 
+        ? datosMonotributo.impuesto 
+        : [datosMonotributo.impuesto];
       
-      if (!data || !data.nombre) {
-        throw new Error('CUIT no encontrado');
+      const tieneMonotributo = impuestos.some(imp => 
+        imp.idImpuesto === 20 || imp.descripcionImpuesto?.toLowerCase().includes('monotributo')
+      );
+      
+      if (tieneMonotributo) {
+        return {
+          code: 6,
+          name: 'Responsable Monotributo',
+          shortName: 'monotributista'
+        };
       }
-
-      const condicionIva = this.detectCondicionFromText(data.condicionIVA || '');
-      const tipoPersona = cuit.startsWith('30') || cuit.startsWith('33') || cuit.startsWith('34') 
-        ? 'JURIDICA' 
-        : 'FISICA';
-
-      return {
-        cuit,
-        razonSocial: data.nombre || data.razonSocial || 'Sin datos',
-        tipoPersona,
-        condicionIva,
-        domicilioFiscal: data.domicilio || null,
-        estadoCuit: data.estado || 'ACTIVO',
-        _raw: data
-      };
-    } catch (error) {
-      clearTimeout(timeout);
-      throw error;
-    }
-  }
-
-  /**
-   * Map IVA condition from TangoFactura
-   */
-  mapCondicionIva(idImpuestoIVA, monotributo) {
-    // If monotributo is true or has data
-    if (monotributo === true || monotributo === 'S') {
-      return {
-        code: 6,
-        name: 'Responsable Monotributo',
-        shortName: 'monotributista'
-      };
     }
 
-    const mapping = {
-      1: { code: 1, name: 'IVA Responsable Inscripto', shortName: 'responsable_inscripto' },
-      2: { code: 1, name: 'IVA Responsable Inscripto', shortName: 'responsable_inscripto' },
-      3: { code: 1, name: 'IVA Responsable Inscripto', shortName: 'responsable_inscripto' },
-      4: { code: 4, name: 'IVA Sujeto Exento', shortName: 'exento' },
-      5: { code: 5, name: 'Consumidor Final', shortName: 'consumidor_final' },
-      6: { code: 6, name: 'Responsable Monotributo', shortName: 'monotributista' },
-    };
+    // Check for IVA inscription in régimen general
+    if (datosRegimenGeneral && datosRegimenGeneral.impuesto) {
+      const impuestos = Array.isArray(datosRegimenGeneral.impuesto) 
+        ? datosRegimenGeneral.impuesto 
+        : [datosRegimenGeneral.impuesto];
+      
+      // Look for IVA (code 30) 
+      const tieneIVA = impuestos.some(imp => imp.idImpuesto === 30);
+      
+      if (tieneIVA) {
+        return {
+          code: 1,
+          name: 'IVA Responsable Inscripto',
+          shortName: 'responsable_inscripto'
+        };
+      }
+    }
 
-    return mapping[idImpuestoIVA] || {
-      code: 1,
-      name: 'IVA Responsable Inscripto',
-      shortName: 'responsable_inscripto'
+    // Default: Consumidor Final
+    return {
+      code: 5,
+      name: 'Consumidor Final',
+      shortName: 'consumidor_final'
     };
   }
 
   /**
-   * Detect condición IVA from text
+   * Build domicilio string from AFIP data
    */
-  detectCondicionFromText(text) {
-    const t = (text || '').toLowerCase();
+  buildDomicilio(domicilio) {
+    if (!domicilio) return null;
     
-    if (t.includes('responsable inscripto') || t.includes('ri')) {
-      return { code: 1, name: 'IVA Responsable Inscripto', shortName: 'responsable_inscripto' };
-    }
-    if (t.includes('monotributo')) {
-      return { code: 6, name: 'Responsable Monotributo', shortName: 'monotributista' };
-    }
-    if (t.includes('exento')) {
-      return { code: 4, name: 'IVA Sujeto Exento', shortName: 'exento' };
-    }
+    const parts = [
+      domicilio.direccion,
+      domicilio.localidad,
+      domicilio.descripcionProvincia || domicilio.provincia,
+      domicilio.codPostal ? `CP ${domicilio.codPostal}` : null
+    ].filter(Boolean);
     
-    return { code: 5, name: 'Consumidor Final', shortName: 'consumidor_final' };
+    return parts.length > 0 ? parts.join(', ') : null;
+  }
+
+  /**
+   * Get actividad principal
+   */
+  getActividadPrincipal(actividades) {
+    if (!actividades) return null;
+    
+    const acts = Array.isArray(actividades) ? actividades : [actividades];
+    const principal = acts.find(a => a.orden === 1) || acts[0];
+    
+    if (!principal) return null;
+    
+    return {
+      codigo: principal.idActividad,
+      descripcion: principal.descripcionActividad
+    };
   }
 
   /**
