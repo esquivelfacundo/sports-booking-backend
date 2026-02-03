@@ -226,15 +226,20 @@ router.delete('/disconnect/:establishmentId', authenticateToken, async (req, res
 router.get('/status/:establishmentId', authenticateToken, async (req, res) => {
   try {
     const { establishmentId } = req.params;
-    const userId = req.user.id;
 
-    const establishment = await Establishment.findOne({
-      where: { id: establishmentId, userId },
-      attributes: ['id', 'mpUserId', 'mpEmail', 'mpConnectedAt', 'mpActive', 'mpTokenExpiresAt', 'customFeePercent']
+    const establishment = await Establishment.findByPk(establishmentId, {
+      attributes: ['id', 'userId', 'mpUserId', 'mpEmail', 'mpConnectedAt', 'mpActive', 'mpTokenExpiresAt', 'customFeePercent']
     });
 
     if (!establishment) {
       return res.status(404).json({ error: 'Establishment not found' });
+    }
+
+    // Check ownership or staff
+    const isOwner = establishment.userId === req.user.id;
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishment.id;
+    if (!isOwner && !isStaff && req.user.userType !== 'superadmin') {
+      return res.status(403).json({ error: 'Not authorized' });
     }
 
     const isConnected = !!(establishment.mpUserId && establishment.mpActive);

@@ -427,8 +427,10 @@ router.get('/:id/api-key', authenticateToken, requireRole(['establishment', 'adm
       return res.status(404).json({ success: false, error: 'Establishment not found' });
     }
     
-    // Check ownership
-    if (req.user.role !== 'admin' && establishment.userId !== req.user.id) {
+    // Check ownership or staff
+    const isOwner = establishment.userId === req.user.id;
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishment.id;
+    if (!isOwner && !isStaff && req.user.userType !== 'superadmin') {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
     
@@ -452,8 +454,10 @@ router.post('/:id/api-key/generate', authenticateToken, requireRole(['establishm
       return res.status(404).json({ success: false, error: 'Establishment not found' });
     }
     
-    // Check ownership
-    if (req.user.role !== 'admin' && establishment.userId !== req.user.id) {
+    // Check ownership or staff
+    const isOwner = establishment.userId === req.user.id;
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishment.id;
+    if (!isOwner && !isStaff && req.user.userType !== 'superadmin') {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
     
@@ -481,8 +485,10 @@ router.delete('/:id/api-key', authenticateToken, requireRole(['establishment', '
       return res.status(404).json({ success: false, error: 'Establishment not found' });
     }
     
-    // Check ownership
-    if (req.user.role !== 'admin' && establishment.userId !== req.user.id) {
+    // Check ownership or staff
+    const isOwner = establishment.userId === req.user.id;
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishment.id;
+    if (!isOwner && !isStaff && req.user.userType !== 'superadmin') {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
     
