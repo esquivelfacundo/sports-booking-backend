@@ -501,6 +501,27 @@ router.get('/consultar-cuit/:establishmentId/:cuit', authenticateToken, async (r
   }
 });
 
+/**
+ * DELETE /api/arca/consultar-cuit/cache/:cuit
+ * Clear cache for a specific CUIT (for debugging)
+ */
+router.delete('/consultar-cuit/cache/:cuit', authenticateToken, async (req, res) => {
+  const { cuit } = req.params;
+  console.log(`[PADRON] Clearing cache for CUIT: ${cuit}`);
+  PadronService.clearCache(cuit);
+  res.json({ success: true, message: `Cache cleared for CUIT ${cuit}` });
+});
+
+/**
+ * DELETE /api/arca/consultar-cuit/cache
+ * Clear all padrón cache (for debugging)
+ */
+router.delete('/consultar-cuit/cache', authenticateToken, async (req, res) => {
+  console.log(`[PADRON] Clearing ALL cache`);
+  PadronService.clearCache();
+  res.json({ success: true, message: 'All padrón cache cleared' });
+});
+
 // =====================================================
 // INVOICING ENDPOINTS
 // =====================================================
