@@ -1,7 +1,8 @@
-const { Booking, Court, Establishment, User, Payment, SplitPayment, SplitPaymentParticipant, Client, Order, Amenity } = require('../models');
+const { Booking, Court, Establishment, User, Payment, SplitPayment, SplitPaymentParticipant, Client, Order, Amenity, BookingPayment } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const WebhookService = require('../services/webhookService');
+const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
 
 const createBooking = async (req, res) => {
   try {
@@ -244,6 +245,37 @@ const createBooking = async (req, res) => {
 
     // Use the first booking for response
     const booking = createdBookings[0];
+
+    // Register initial deposit payment if depositAmount > 0 and depositMethod is provided
+    if (depositAmount > 0 && depositMethod) {
+      // Create BookingPayment record for the initial deposit
+      await BookingPayment.create({
+        bookingId: booking.id,
+        amount: parseFloat(depositAmount),
+        method: depositMethod,
+        playerName: clientName || 'Seña inicial',
+        notes: 'Seña al momento de crear la reserva',
+        registeredBy: userId,
+        paidAt: new Date()
+      });
+
+      // Register in cash register if user has one open
+      const cashRegister = await getUserActiveCashRegister(userId, establishment.id);
+      if (cashRegister) {
+        await registerSaleMovement({
+          cashRegisterId: cashRegister.id,
+          establishmentId: establishment.id,
+          bookingId: booking.id,
+          amount: parseFloat(depositAmount),
+          paymentMethod: depositMethod,
+          description: `Seña de reserva - ${clientName || 'Cliente'}`,
+          registeredBy: userId
+        });
+        console.log(`[Booking] Deposit of ${depositAmount} registered in cash register ${cashRegister.id}`);
+      } else {
+        console.log(`[Booking] No open cash register for user ${userId}, deposit not registered in cash`);
+      }
+    }
 
     // Handle split payment setup
     if (paymentType === 'split' && splitPaymentData) {

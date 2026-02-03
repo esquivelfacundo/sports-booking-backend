@@ -121,13 +121,19 @@ async function registerOrderSaleMovements({
 
 /**
  * Check if user has an open cash register
+ * Searches by userId OR staffId to support both owners and staff
  */
 async function getUserActiveCashRegister(userId, establishmentId) {
+  const { Op } = require('sequelize');
+  
   return await CashRegister.findOne({
     where: {
-      userId,
       establishmentId,
-      status: 'open'
+      status: 'open',
+      [Op.or]: [
+        { userId },
+        { staffId: userId }
+      ]
     }
   });
 }
