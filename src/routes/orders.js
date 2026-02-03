@@ -188,7 +188,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
         const BookingPayment = require('../models').BookingPayment;
         const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
         const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
-        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const declaredPmts = bpList.filter(p => p.paymentType !== 'deposit');
         const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
@@ -1071,7 +1071,7 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
         const BookingPayment = require('../models').BookingPayment;
         const bpList = await BookingPayment.findAll({ where: { bookingId: order.bookingId }, raw: true });
         const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
-        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const declaredPmts = bpList.filter(p => p.paymentType !== 'deposit');
         const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || parseFloat(booking.initialDeposit) || 0;
         const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
@@ -1207,7 +1207,7 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         // Get booking payments separated by type
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
         const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
-        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const declaredPmts = bpList.filter(p => p.paymentType !== 'deposit');
         const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         

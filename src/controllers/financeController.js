@@ -240,7 +240,7 @@ const getFinancialSummary = async (req, res) => {
         // Get booking payments
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
         const depPmts = bpList.filter(p => p.paymentType === 'deposit');
-        const decPmts = bpList.filter(p => p.paymentType === 'declared');
+        const decPmts = bpList.filter(p => p.paymentType !== 'deposit');
         const seña = depPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         const bpTotal = decPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
@@ -308,7 +308,7 @@ const getFinancialSummary = async (req, res) => {
         // Get booking payments separated by type
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
         const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
-        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const declaredPmts = bpList.filter(p => p.paymentType !== 'deposit');
         const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         
         // Add seña to deposit method
@@ -546,7 +546,7 @@ const getFinancialSummary = async (req, res) => {
         
         const bpList = await BookingPayment.findAll({ where: { bookingId: o.bookingId }, raw: true });
         const depositPmts = bpList.filter(p => p.paymentType === 'deposit');
-        const declaredPmts = bpList.filter(p => p.paymentType === 'declared');
+        const declaredPmts = bpList.filter(p => p.paymentType !== 'deposit');
         const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         const declaredTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         paidAmount = seña + declaredTotal;
