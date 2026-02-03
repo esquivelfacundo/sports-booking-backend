@@ -10,9 +10,9 @@ const { sequelize } = require('../config/database');
 
 const router = express.Router();
 
-// All routes require authentication and admin role
+// All routes require authentication and establishment or admin role
 router.use(authenticateToken);
-router.use(requireRole(['admin']));
+router.use(requireRole(['establishment', 'admin']));
 
 // Get comprehensive analytics for an establishment
 router.get('/establishment/:establishmentId', getEstablishmentAnalytics);

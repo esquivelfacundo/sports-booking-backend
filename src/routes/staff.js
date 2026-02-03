@@ -25,9 +25,9 @@ router.post('/validate-pin', authenticateToken, validatePin);
 router.get('/me', authenticateToken, getMyProfile);
 router.put('/me', authenticateToken, updateMyProfile);
 
-// Protected routes - require admin authentication
+// Protected routes - require establishment owner or admin authentication
 router.use(authenticateToken);
-router.use(requireRole(['admin']));
+router.use(requireRole(['establishment', 'admin']));
 
 // Get all staff for an establishment
 router.get('/establishment/:establishmentId', getStaff);
