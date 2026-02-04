@@ -535,7 +535,7 @@ router.post('/facturas/:establishmentId', authenticateToken, async (req, res) =>
     const { establishmentId } = req.params;
     const { 
       items, total, cliente, receptorCondicion,
-      orderId, bookingId, puntoVentaId 
+      orderId: passedOrderId, bookingId, puntoVentaId 
     } = req.body;
 
     // Validate
@@ -547,22 +547,69 @@ router.post('/facturas/:establishmentId', authenticateToken, async (req, res) =>
       return res.status(400).json({ error: 'El total debe ser mayor a 0' });
     }
 
-    // Check if already invoiced
+    // Resolve orderId: use passed orderId or find it from bookingId
+    let orderId = passedOrderId;
+    if (!orderId && bookingId) {
+      const orderFromBooking = await Order.findOne({
+        where: { bookingId },
+        attributes: ['id']
+      });
+      if (orderFromBooking) {
+        orderId = orderFromBooking.id;
+      }
+    }
+
+    // Validate payment status before invoicing
+    if (orderId) {
+      const order = await Order.findByPk(orderId, {
+        attributes: ['id', 'bookingId', 'total', 'paidAmount', 'paymentStatus']
+      });
+      
+      if (order) {
+        // For booking_consumption orders, check booking payments
+        if (order.bookingId) {
+          const booking = await Booking.findByPk(order.bookingId, {
+            attributes: ['id', 'totalAmount', 'depositAmount', 'initialDeposit']
+          });
+          const BookingPayment = require('../models').BookingPayment;
+          const BookingConsumption = require('../models').BookingConsumption;
+          
+          const consumptions = await BookingConsumption.findAll({ 
+            where: { bookingId: order.bookingId }, 
+            attributes: ['totalPrice'] 
+          });
+          const consumptionsTotal = consumptions.reduce((sum, c) => sum + (parseFloat(c.totalPrice) || 0), 0);
+          const bookingTotal = (parseFloat(booking?.totalAmount) || 0) + consumptionsTotal;
+          
+          const payments = await BookingPayment.findAll({ 
+            where: { bookingId: order.bookingId }, 
+            attributes: ['amount'] 
+          });
+          const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+          
+          if (totalPaid < bookingTotal) {
+            return res.status(400).json({ 
+              error: `No se puede facturar con saldo pendiente. Total: $${bookingTotal.toLocaleString()}, Pagado: $${totalPaid.toLocaleString()}` 
+            });
+          }
+        } else {
+          // Direct sale - check order payment status
+          if (order.paymentStatus !== 'paid') {
+            return res.status(400).json({ 
+              error: 'No se puede facturar una venta con pago pendiente' 
+            });
+          }
+        }
+      }
+    }
+
+    // Check if already invoiced by orderId
     if (orderId) {
       const existingInvoice = await Invoice.findOne({
         where: { orderId, status: 'emitido' }
       });
       if (existingInvoice) {
         return res.status(400).json({ error: 'Esta venta ya tiene una factura emitida' });
-      }
-    }
-
-    if (bookingId) {
-      const existingInvoice = await Invoice.findOne({
-        where: { bookingId, status: 'emitido' }
-      });
-      if (existingInvoice) {
-        return res.status(400).json({ error: 'Esta reserva ya tiene una factura emitida' });
       }
     }
 
@@ -588,7 +635,16 @@ router.post('/facturas/:establishmentId', authenticateToken, async (req, res) =>
       receptorCondicion: receptorCondicion || 'consumidor_final'
     });
 
-    // Save to database
+    // Get bookingId from order if not provided
+    let resolvedBookingId = bookingId;
+    if (!resolvedBookingId && orderId) {
+      const orderForBooking = await Order.findByPk(orderId, { attributes: ['bookingId'] });
+      if (orderForBooking?.bookingId) {
+        resolvedBookingId = orderForBooking.bookingId;
+      }
+    }
+
+    // Save to database - orderId is the primary reference
     const invoice = await Invoice.create({
       establishmentId,
       afipConfigId: afipConfig.id,
@@ -609,18 +665,19 @@ router.post('/facturas/:establishmentId', authenticateToken, async (req, res) =>
       clienteCondicionIva: resultado.cliente.condicionIva,
       items: resultado.items,
       orderId: orderId || null,
-      bookingId: bookingId || null,
+      bookingId: resolvedBookingId || null,
       status: 'emitido',
       afipResponse: resultado.afipResponse,
       createdById: req.user.id
     });
 
-    // Update order/booking with invoice reference
+    // Always update Order with invoice reference (primary)
     if (orderId) {
       await Order.update({ invoiceId: invoice.id }, { where: { id: orderId } });
     }
-    if (bookingId) {
-      await Booking.update({ invoiceId: invoice.id }, { where: { id: bookingId } });
+    // Also update Booking if exists
+    if (resolvedBookingId) {
+      await Booking.update({ invoiceId: invoice.id }, { where: { id: resolvedBookingId } });
     }
 
     res.json({
