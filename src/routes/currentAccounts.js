@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { CurrentAccount, CurrentAccountMovement, Client, EstablishmentStaff, Establishment, Order, User } = require('../models');
+const { CurrentAccount, CurrentAccountMovement, Client, Establishment, Order, User } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 
@@ -35,7 +35,7 @@ router.get('/establishment/:establishmentId', authenticateToken, async (req, res
       where,
       include: [
         { model: Client, as: 'client' },
-        { model: EstablishmentStaff, as: 'staff' }
+        { model: User, as: 'staff', attributes: ['id', 'firstName', 'lastName', 'email', 'phone'] }
       ],
       order: [['holderName', 'ASC']]
     });
@@ -57,7 +57,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const account = await CurrentAccount.findByPk(id, {
       include: [
         { model: Client, as: 'client' },
-        { model: EstablishmentStaff, as: 'staff' }
+        { model: User, as: 'staff', attributes: ['id', 'firstName', 'lastName', 'email', 'phone'] }
       ]
     });
 
@@ -117,9 +117,18 @@ router.post('/', authenticateToken, async (req, res) => {
         where: { establishmentId, clientId }
       });
       if (existingAccount) {
+        // If account exists but is inactive, reactivate it
+        if (!existingAccount.isActive) {
+          await existingAccount.update({ isActive: true });
+          return res.status(200).json({ 
+            success: true, 
+            data: existingAccount,
+            message: 'Se reactivó la cuenta corriente existente'
+          });
+        }
         return res.status(400).json({ 
           success: false, 
-          error: 'Ya existe una cuenta corriente para este cliente' 
+          error: 'Ya existe una cuenta corriente activa para este cliente' 
         });
       }
     }
@@ -129,9 +138,18 @@ router.post('/', authenticateToken, async (req, res) => {
         where: { establishmentId, staffId }
       });
       if (existingAccount) {
+        // If account exists but is inactive, reactivate it
+        if (!existingAccount.isActive) {
+          await existingAccount.update({ isActive: true });
+          return res.status(200).json({ 
+            success: true, 
+            data: existingAccount,
+            message: 'Se reactivó la cuenta corriente existente'
+          });
+        }
         return res.status(400).json({ 
           success: false, 
-          error: 'Ya existe una cuenta corriente para este empleado' 
+          error: 'Ya existe una cuenta corriente activa para este empleado' 
         });
       }
     }
@@ -331,41 +349,46 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
     const { establishmentId } = req.params;
     const { useCostPrice = true, discountPercentage = 0 } = req.body;
 
-    // Get all active staff for this establishment
-    const staff = await EstablishmentStaff.findAll({
-      where: { establishmentId, isActive: true },
+    // Get all active staff users for this establishment (users with establishmentId and isStaff=true)
+    const staffUsers = await User.findAll({
+      where: { 
+        establishmentId, 
+        isStaff: true,
+        isActive: true
+      },
       include: [{
         model: CurrentAccount,
-        as: 'currentAccount',
+        as: 'staffCurrentAccount',
         required: false
       }]
     });
 
-    console.log(`[CurrentAccounts] Found ${staff.length} active staff members for establishment ${establishmentId}`);
+    console.log(`[CurrentAccounts] Found ${staffUsers.length} active staff members for establishment ${establishmentId}`);
 
     // Filter staff without accounts
-    const staffWithoutAccounts = staff.filter(s => !s.currentAccount);
+    const staffWithoutAccounts = staffUsers.filter(s => !s.staffCurrentAccount);
     
     console.log(`[CurrentAccounts] ${staffWithoutAccounts.length} staff members without accounts`);
 
     if (staffWithoutAccounts.length === 0) {
       return res.json({ 
         success: true, 
-        message: staff.length === 0 
+        message: staffUsers.length === 0 
           ? 'No hay empleados registrados en el establecimiento' 
           : 'Todos los empleados ya tienen cuenta corriente',
         data: [],
-        totalStaff: staff.length,
-        staffWithAccounts: staff.length
+        totalStaff: staffUsers.length,
+        staffWithAccounts: staffUsers.length
       });
     }
 
     const createdAccounts = [];
     for (const staffMember of staffWithoutAccounts) {
+      const fullName = `${staffMember.firstName || ''} ${staffMember.lastName || ''}`.trim() || staffMember.email;
       const account = await CurrentAccount.create({
         establishmentId,
         staffId: staffMember.id,
-        holderName: staffMember.name,
+        holderName: fullName,
         holderPhone: staffMember.phone,
         holderEmail: staffMember.email,
         accountType: 'employee',
@@ -379,8 +402,8 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
       success: true, 
       message: `Se crearon ${createdAccounts.length} cuentas corrientes para empleados`,
       data: createdAccounts,
-      totalStaff: staff.length,
-      staffWithAccounts: staff.length - staffWithoutAccounts.length + createdAccounts.length
+      totalStaff: staffUsers.length,
+      staffWithAccounts: staffUsers.length - staffWithoutAccounts.length + createdAccounts.length
     });
   } catch (error) {
     console.error('Error auto-creating staff accounts:', error);
@@ -418,7 +441,7 @@ router.get('/establishment/:establishmentId/export', authenticateToken, async (r
       where,
       include: [
         { model: Client, as: 'client' },
-        { model: EstablishmentStaff, as: 'staff' }
+        { model: User, as: 'staff', attributes: ['id', 'firstName', 'lastName', 'email', 'phone'] }
       ],
       order: [['holderName', 'ASC']]
     });
