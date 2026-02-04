@@ -219,8 +219,9 @@ router.post('/expense', authenticateToken, async (req, res) => {
       updates[methodField] = Math.max(0, parseFloat(cashRegister[methodField]) - expenseAmount);
     }
 
-    // Update expected cash if payment method is cash
-    if (paymentMethod === 'cash') {
+    // Update expected cash if payment method is cash (check both 'cash' and 'efectivo')
+    const isCashPayment = paymentMethod?.toLowerCase() === 'cash' || paymentMethod?.toLowerCase() === 'efectivo';
+    if (isCashPayment) {
       updates.expectedCash = Math.max(0, parseFloat(cashRegister.expectedCash) - expenseAmount);
     }
 

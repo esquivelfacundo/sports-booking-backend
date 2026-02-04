@@ -79,8 +79,9 @@ async function registerSaleMovement({
   const methodField = getPaymentMethodField(paymentMethod);
   updates[methodField] = parseFloat(cashRegister[methodField]) + parseFloat(amount);
 
-  // Update expected cash if payment method is cash
-  if (paymentMethod === 'cash') {
+  // Update expected cash if payment method is cash (check both 'cash' and 'efectivo')
+  const isCashPayment = paymentMethod?.toLowerCase() === 'cash' || paymentMethod?.toLowerCase() === 'efectivo';
+  if (isCashPayment) {
     updates.expectedCash = parseFloat(cashRegister.expectedCash) + parseFloat(amount);
   }
 
