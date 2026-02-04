@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { CashRegisterMovement, CashRegister, Establishment, User, Order, Booking, ExpenseCategory, Expense } = require('../models');
+const { CashRegisterMovement, CashRegister, Establishment, User, Order, OrderItem, Booking, ExpenseCategory, Expense } = require('../models');
 const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
@@ -106,6 +106,71 @@ router.get('/', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching cash register movements:', error);
     res.status(500).json({ error: 'Failed to fetch movements' });
+  }
+});
+
+// Get products sold for a cash register (grouped by product)
+router.get('/products-sold', authenticateToken, async (req, res) => {
+  try {
+    const { cashRegisterId } = req.query;
+
+    if (!cashRegisterId) {
+      return res.status(400).json({ error: 'cashRegisterId is required' });
+    }
+
+    const cashRegister = await CashRegister.findByPk(cashRegisterId);
+    if (!cashRegister) {
+      return res.status(404).json({ error: 'Cash register not found' });
+    }
+
+    // Get all sale movements for this cash register that have an orderId
+    const saleMovements = await CashRegisterMovement.findAll({
+      where: {
+        cashRegisterId,
+        type: 'sale',
+        orderId: { [Op.not]: null }
+      },
+      attributes: ['orderId']
+    });
+
+    const orderIds = saleMovements.map(m => m.orderId).filter(Boolean);
+
+    if (orderIds.length === 0) {
+      return res.json({ products: [] });
+    }
+
+    // Get all order items for these orders
+    const orderItems = await OrderItem.findAll({
+      where: {
+        orderId: { [Op.in]: orderIds }
+      }
+    });
+
+    // Group by productId and aggregate
+    const productMap = new Map();
+    
+    for (const item of orderItems) {
+      const key = item.productId;
+      if (productMap.has(key)) {
+        const existing = productMap.get(key);
+        existing.quantity += item.quantity;
+        existing.totalAmount += parseFloat(item.totalPrice);
+      } else {
+        productMap.set(key, {
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          totalAmount: parseFloat(item.totalPrice)
+        });
+      }
+    }
+
+    const products = Array.from(productMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    res.json({ products });
+  } catch (error) {
+    console.error('Error fetching products sold:', error);
+    res.status(500).json({ error: 'Failed to fetch products sold' });
   }
 });
 
