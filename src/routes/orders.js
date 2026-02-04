@@ -1214,23 +1214,23 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         
         const orderTotal = bookingTotal + consumptionsTotal;
         const orderPaid = seña + bpTotal;
-        totalRevenue += orderTotal;
-        totalPaid += orderPaid;
         
-        // Only add to pending if order/booking is NOT cancelled
+        // Only count if order/booking is NOT cancelled
         const isCancelled = o.status === 'cancelled' || bookingStatus === 'cancelled';
         if (!isCancelled) {
+          totalRevenue += orderTotal;
+          totalPaid += orderPaid;
           pendingAmount += Math.max(0, orderTotal - orderPaid);
         }
       } else {
         // For direct sales, use order values directly
         const orderTotal = parseFloat(o.total) || 0;
         const orderPaid = parseFloat(o.paidAmount) || 0;
-        totalRevenue += orderTotal;
-        totalPaid += orderPaid;
         
-        // Only add to pending if order is NOT cancelled
+        // Only count if order is NOT cancelled
         if (o.status !== 'cancelled') {
+          totalRevenue += orderTotal;
+          totalPaid += orderPaid;
           pendingAmount += Math.max(0, orderTotal - orderPaid);
         }
       }
