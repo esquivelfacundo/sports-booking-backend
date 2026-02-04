@@ -1199,6 +1199,7 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         const bookingTotal = parseFloat(o.booking?.totalAmount) || 0;
         const depositAmount = parseFloat(o.booking?.depositAmount) || 0;
         const initialDeposit = parseFloat(o.booking?.initialDeposit) || 0;
+        const bookingStatus = o.booking?.status;
         
         // Get consumptions total
         const consumptions = await BookingConsumption.findAll({ where: { bookingId: o.bookingId }, raw: true });
@@ -1216,8 +1217,9 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         totalRevenue += orderTotal;
         totalPaid += orderPaid;
         
-        // Only add to pending if order is NOT cancelled
-        if (o.status !== 'cancelled') {
+        // Only add to pending if order/booking is NOT cancelled
+        const isCancelled = o.status === 'cancelled' || bookingStatus === 'cancelled';
+        if (!isCancelled) {
           pendingAmount += Math.max(0, orderTotal - orderPaid);
         }
       } else {
