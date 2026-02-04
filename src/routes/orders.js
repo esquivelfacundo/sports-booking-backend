@@ -1191,7 +1191,7 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
     
     // Calculate totals with same logic as order list (to match table values)
     const allOrders = await Order.findAll({ where, include: [{ model: Booking, as: 'booking' }], raw: true, nest: true });
-    let totalRevenue = 0, totalPaid = 0;
+    let totalRevenue = 0, totalPaid = 0, pendingAmount = 0;
     
     for (const o of allOrders) {
       if (o.orderType === 'booking_consumption' && o.bookingId) {
@@ -1211,15 +1211,28 @@ router.get('/stats/:establishmentId', authenticateToken, async (req, res) => {
         const seña = depositPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || initialDeposit;
         const bpTotal = declaredPmts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         
-        totalRevenue += bookingTotal + consumptionsTotal;
-        totalPaid += seña + bpTotal;
+        const orderTotal = bookingTotal + consumptionsTotal;
+        const orderPaid = seña + bpTotal;
+        totalRevenue += orderTotal;
+        totalPaid += orderPaid;
+        
+        // Only add to pending if order is NOT cancelled
+        if (o.status !== 'cancelled') {
+          pendingAmount += Math.max(0, orderTotal - orderPaid);
+        }
       } else {
         // For direct sales, use order values directly
-        totalRevenue += parseFloat(o.total) || 0;
-        totalPaid += parseFloat(o.paidAmount) || 0;
+        const orderTotal = parseFloat(o.total) || 0;
+        const orderPaid = parseFloat(o.paidAmount) || 0;
+        totalRevenue += orderTotal;
+        totalPaid += orderPaid;
+        
+        // Only add to pending if order is NOT cancelled
+        if (o.status !== 'cancelled') {
+          pendingAmount += Math.max(0, orderTotal - orderPaid);
+        }
       }
     }
-    const pendingAmount = Math.max(0, totalRevenue - totalPaid);
     
     const directSales = await Order.count({ where: { ...where, orderType: 'direct_sale' } });
     const bookingConsumptions = await Order.count({ where: { ...where, orderType: 'booking_consumption' } });
