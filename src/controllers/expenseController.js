@@ -23,7 +23,8 @@ const getExpenses = async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -150,7 +151,8 @@ const createExpense = async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -234,7 +236,8 @@ const updateExpense = async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(expense.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === expense.establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -300,7 +303,8 @@ const deleteExpense = async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(expense.establishmentId);
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === expense.establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -365,7 +369,8 @@ const exportExpenses = async (req, res) => {
       return res.status(404).json({ error: 'Establishment not found' });
     }
 
-    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin') {
+    const isStaff = req.user.isStaff && req.user.establishmentId === establishmentId;
+    if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

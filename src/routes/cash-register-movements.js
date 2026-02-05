@@ -199,7 +199,7 @@ router.post('/expense', authenticateToken, async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(cashRegister.establishmentId);
-    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    const isStaff = req.user.isStaff && req.user.establishmentId === cashRegister.establishmentId;
     if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       await transaction.rollback();
       return res.status(403).json({ error: 'Access denied' });
@@ -335,7 +335,7 @@ router.get('/report/:cashRegisterId', authenticateToken, async (req, res) => {
 
     // Verify access
     const establishment = await Establishment.findByPk(cashRegister.establishmentId);
-    const isStaff = req.user.isStaff && req.user.establishmentId === (establishment.id || establishmentId);
+    const isStaff = req.user.isStaff && req.user.establishmentId === cashRegister.establishmentId;
     if (establishment.userId !== req.user.id && req.user.userType !== 'superadmin' && !isStaff) {
       return res.status(403).json({ error: 'Access denied' });
     }
