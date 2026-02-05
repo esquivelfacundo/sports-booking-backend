@@ -126,10 +126,12 @@ const getFinancialSummary = async (req, res) => {
     });
     
     // Enrich orders with calculated totals (same logic as /ventas)
-    const currentOrders = await Promise.all(currentOrdersRaw.map(async (order) => {
+    // Also filter out orders where the associated booking is cancelled
+    const currentOrdersEnriched = await Promise.all(currentOrdersRaw.map(async (order) => {
       let calculatedTotal = parseFloat(order.total) || 0;
       let clientName = order.customerName;
       let clientPhone = order.customerPhone;
+      let isCancelled = order.status === 'cancelled';
       
       // Get client if exists
       if (order.clientId && !clientName) {
@@ -143,9 +145,14 @@ const getFinancialSummary = async (req, res) => {
       // For booking_consumption, calculate total from booking + consumptions
       if (order.orderType === 'booking_consumption' && order.bookingId) {
         const fullBooking = await Booking.findByPk(order.bookingId, {
-          attributes: ['id', 'totalAmount', 'depositAmount', 'clientName', 'clientPhone'],
+          attributes: ['id', 'totalAmount', 'depositAmount', 'clientName', 'clientPhone', 'status'],
           raw: true
         });
+        
+        // Check if booking is cancelled
+        if (fullBooking?.status === 'cancelled') {
+          isCancelled = true;
+        }
         
         const consumptions = await BookingConsumption.findAll({
           where: { bookingId: order.bookingId },
@@ -166,9 +173,13 @@ const getFinancialSummary = async (req, res) => {
         ...order,
         total: calculatedTotal,
         customerName: clientName || 'Cliente',
-        customerPhone: clientPhone || ''
+        customerPhone: clientPhone || '',
+        isCancelled
       };
     }));
+    
+    // Filter out cancelled orders (including those with cancelled bookings)
+    const currentOrders = currentOrdersEnriched.filter(o => !o.isCancelled);
 
     // Get previous period bookings for comparison
     const previousBookings = await Booking.findAll({
