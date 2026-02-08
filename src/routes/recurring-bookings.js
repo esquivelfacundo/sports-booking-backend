@@ -171,8 +171,11 @@ router.post('/check-availability', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
+    // Cap totalWeeks at 52 (1 year)
+    const cappedWeeks = Math.min(parseInt(totalWeeks) || 52, 52);
+    
     const endTime = calculateEndTime(startTime, duration);
-    const dates = generateRecurringDates(startDate, totalWeeks);
+    const dates = generateRecurringDates(startDate, cappedWeeks);
     
     // Get the primary court
     const primaryCourt = await Court.findByPk(courtId, {
@@ -316,6 +319,9 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
+    // Cap totalWeeks at 52 (1 year)
+    const cappedTotalWeeks = Math.min(parseInt(totalWeeks) || 52, 52);
+    
     // Get establishment to check payment policy
     const establishment = await Establishment.findByPk(establishmentId);
     if (!establishment) {
@@ -331,7 +337,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     
     const endTime = calculateEndTime(startTime, duration);
-    const dates = generateRecurringDates(startDate, totalWeeks);
+    const dates = generateRecurringDates(startDate, cappedTotalWeeks);
     const dayOfWeek = new Date(startDate + 'T00:00:00').getDay();
     
     // Create date config map for easy lookup
