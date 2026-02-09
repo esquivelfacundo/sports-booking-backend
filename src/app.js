@@ -121,6 +121,7 @@ app.use('/api/amenities', require('./routes/amenities'));
 app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/v1', require('./routes/api-v1'));
 app.use('/api/whatsapp', require('./routes/whatsapp'));
+app.use('/webhook/whatsapp', require('./routes/whatsapp-meta-webhook'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/recurring-bookings', require('./routes/recurring-bookings'));
 app.use('/api/arca', require('./routes/arca'));
