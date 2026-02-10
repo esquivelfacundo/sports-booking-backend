@@ -586,24 +586,39 @@ const generateTimeSlots = (openTime, closeTime, duration, bookings, blockedSlots
   
   // Convert times to minutes for easier calculation
   const openMinutes = timeToMinutes(openTime);
-  const closeMinutes = timeToMinutes(closeTime);
+  let closeMinutes = timeToMinutes(closeTime);
+  
+  // If close is before or equal to open, it crosses midnight (e.g. 08:00 - 01:30)
+  if (closeMinutes <= openMinutes) {
+    closeMinutes += 1440; // Add 24 hours
+  }
   
   // Generate slots every 30 minutes
   for (let time = openMinutes; time + durationMinutes <= closeMinutes; time += 30) {
-    const startTime = minutesToTime(time);
-    const endTime = minutesToTime(time + durationMinutes);
+    const startTime = minutesToTime(time % 1440);
+    const endTime = minutesToTime((time + durationMinutes) % 1440);
     
     // Check if slot conflicts with existing bookings
     const isBooked = bookings.some(booking => {
-      const bookingStart = timeToMinutes(booking.startTime);
-      const bookingEnd = timeToMinutes(booking.endTime);
+      let bookingStart = timeToMinutes(booking.startTime);
+      let bookingEnd = timeToMinutes(booking.endTime);
+      // Adjust booking times for post-midnight comparison
+      if (closeMinutes > 1440) {
+        if (bookingStart < openMinutes) bookingStart += 1440;
+        if (bookingEnd <= openMinutes) bookingEnd += 1440;
+      }
       return (time < bookingEnd && time + durationMinutes > bookingStart);
     });
     
     // Check if slot conflicts with blocked slots
     const isBlocked = blockedSlots.some(slot => {
-      const slotStart = timeToMinutes(slot.startTime);
-      const slotEnd = timeToMinutes(slot.endTime);
+      let slotStart = timeToMinutes(slot.startTime);
+      let slotEnd = timeToMinutes(slot.endTime);
+      // Adjust blocked slot times for post-midnight comparison
+      if (closeMinutes > 1440) {
+        if (slotStart < openMinutes) slotStart += 1440;
+        if (slotEnd <= openMinutes) slotEnd += 1440;
+      }
       return (time < slotEnd && time + durationMinutes > slotStart);
     });
     

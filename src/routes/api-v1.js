@@ -488,28 +488,39 @@ function generateAvailableSlots(openTime, closeTime, bookings, duration, specifi
   const [closeH, closeM] = closeTime.split(':').map(Number);
   
   const openMinutes = openH * 60 + openM;
-  const closeMinutes = closeH * 60 + closeM;
+  let closeMinutes = closeH * 60 + closeM;
+  
+  // If close is before or equal to open, it crosses midnight (e.g. 08:00 - 01:30)
+  if (closeMinutes <= openMinutes) {
+    closeMinutes += 1440;
+  }
 
   for (let time = openMinutes; time + duration <= closeMinutes; time += 30) {
-    const hours = Math.floor(time / 60);
-    const mins = time % 60;
+    const normalizedTime = time % 1440;
+    const hours = Math.floor(normalizedTime / 60);
+    const mins = normalizedTime % 60;
     const timeStr = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
     
     // Si se especificó hora específica, solo mostrar esa
     if (specificHour && timeStr !== specificHour) continue;
 
     const endTime = time + duration;
-    const endHours = Math.floor(endTime / 60);
-    const endMins = endTime % 60;
+    const normalizedEnd = endTime % 1440;
+    const endHours = Math.floor(normalizedEnd / 60);
+    const endMins = normalizedEnd % 60;
     const endTimeStr = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
 
     // Verificar si hay conflicto con reservas existentes
     const hasConflict = bookings.some(booking => {
       const [bStartH, bStartM] = booking.startTime.split(':').map(Number);
       const [bEndH, bEndM] = booking.endTime.split(':').map(Number);
-      const bStart = bStartH * 60 + bStartM;
-      const bEnd = bEndH * 60 + bEndM;
-      
+      let bStart = bStartH * 60 + bStartM;
+      let bEnd = bEndH * 60 + bEndM;
+      // Adjust booking times for post-midnight comparison
+      if (closeMinutes > 1440) {
+        if (bStart < openMinutes) bStart += 1440;
+        if (bEnd <= openMinutes) bEnd += 1440;
+      }
       return (time < bEnd && endTime > bStart);
     });
 
@@ -519,12 +530,15 @@ function generateAvailableSlots(openTime, closeTime, bookings, duration, specifi
       for (const dur of [60, 90, 120]) {
         const potentialEnd = time + dur;
         if (potentialEnd <= closeMinutes) {
-          const potentialEndStr = `${String(Math.floor(potentialEnd / 60)).padStart(2, '0')}:${String(potentialEnd % 60).padStart(2, '0')}`;
           const hasConflictForDur = bookings.some(booking => {
             const [bStartH, bStartM] = booking.startTime.split(':').map(Number);
             const [bEndH, bEndM] = booking.endTime.split(':').map(Number);
-            const bStart = bStartH * 60 + bStartM;
-            const bEnd = bEndH * 60 + bEndM;
+            let bStart = bStartH * 60 + bStartM;
+            let bEnd = bEndH * 60 + bEndM;
+            if (closeMinutes > 1440) {
+              if (bStart < openMinutes) bStart += 1440;
+              if (bEnd <= openMinutes) bEnd += 1440;
+            }
             return (time < bEnd && potentialEnd > bStart);
           });
           if (!hasConflictForDur) {
