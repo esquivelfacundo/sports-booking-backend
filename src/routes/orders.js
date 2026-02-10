@@ -1096,6 +1096,21 @@ router.post('/:id/payment', authenticateToken, async (req, res) => {
       registeredBy: req.user.id
     });
 
+    // Register cash register movement
+    const cashRegister = await getUserActiveCashRegister(req.user.id, order.establishmentId);
+    if (cashRegister) {
+      await registerSaleMovement({
+        cashRegisterId: cashRegister.id,
+        establishmentId: order.establishmentId,
+        orderId: order.id,
+        bookingId: order.bookingId || null,
+        amount: parseFloat(amount),
+        paymentMethod,
+        description: `Pago adicional - Pedido #${order.orderNumber}`,
+        registeredBy: req.user.id
+      });
+    }
+
     // Update order paid amount and status
     const newPaidAmount = totalPaidSoFar + parseFloat(amount);
     const newPending = Math.max(0, realTotal - newPaidAmount);

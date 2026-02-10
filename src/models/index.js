@@ -249,6 +249,7 @@ const defineAssociations = () => {
   // CashRegister associations
   CashRegister.belongsTo(Establishment, { foreignKey: 'establishmentId', as: 'establishment' });
   CashRegister.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  CashRegister.belongsTo(User, { foreignKey: 'staffId', as: 'staff' });
   Establishment.hasMany(CashRegister, { foreignKey: 'establishmentId', as: 'cashRegisters' });
   User.hasMany(CashRegister, { foreignKey: 'userId', as: 'cashRegisters' });
 

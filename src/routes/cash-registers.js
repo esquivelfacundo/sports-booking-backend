@@ -5,6 +5,37 @@ const { authenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
+// Standard includes for cash register queries (user + staff)
+const cashRegisterUserIncludes = [
+  {
+    model: User,
+    as: 'user',
+    attributes: ['id', 'firstName', 'lastName', 'email'],
+    required: false
+  },
+  {
+    model: User,
+    as: 'staff',
+    attributes: ['id', 'firstName', 'lastName', 'email'],
+    required: false
+  }
+];
+
+// Normalize cash register JSON to always have user.name resolved from either userId or staffId
+function normalizeCashRegisterUser(crJson) {
+  if (crJson.user) {
+    crJson.user.name = `${crJson.user.firstName || ''} ${crJson.user.lastName || ''}`.trim();
+  }
+  if (crJson.staff) {
+    crJson.staff.name = `${crJson.staff.firstName || ''} ${crJson.staff.lastName || ''}`.trim();
+  }
+  // If no user but has staff, copy staff info to user for backward compatibility
+  if (!crJson.user && crJson.staff) {
+    crJson.user = { ...crJson.staff };
+  }
+  return crJson;
+}
+
 // Get active cash register for user
 router.get('/active', authenticateToken, async (req, res) => {
   try {
@@ -46,25 +77,11 @@ router.get('/active', authenticateToken, async (req, res) => {
 
     const cashRegister = await CashRegister.findOne({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          required: false
-        }
-      ]
+      include: cashRegisterUserIncludes
     });
 
     if (cashRegister) {
-      const crJson = cashRegister.toJSON();
-      if (crJson.user) {
-        crJson.user.name = `${crJson.user.firstName} ${crJson.user.lastName}`.trim();
-      }
-      // For staff users, add staff info
-      if (isStaffUser && !crJson.user) {
-        crJson.staffName = req.user.name || `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim();
-      }
+      const crJson = normalizeCashRegisterUser(cashRegister.toJSON());
       return res.json({ cashRegister: crJson });
     }
 
@@ -121,25 +138,15 @@ router.get('/history', authenticateToken, async (req, res) => {
 
     const { count, rows: cashRegisters } = await CashRegister.findAndCountAll({
       where,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'firstName', 'lastName', 'email']
-        }
-      ],
+      include: cashRegisterUserIncludes,
       order: [['openedAt', 'DESC']],
       limit: parseInt(limit),
       offset
     });
 
-    // Add computed user name
+    // Add computed user name (resolves both userId and staffId)
     const cashRegistersWithUserName = cashRegisters.map(cr => {
-      const crJson = cr.toJSON();
-      if (crJson.user) {
-        crJson.user.name = `${crJson.user.firstName} ${crJson.user.lastName}`.trim();
-      }
-      return crJson;
+      return normalizeCashRegisterUser(cr.toJSON());
     });
 
     res.json({
@@ -163,13 +170,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     const cashRegister = await CashRegister.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'firstName', 'lastName', 'email']
-        }
-      ]
+      include: cashRegisterUserIncludes
     });
 
     if (!cashRegister) {
@@ -188,10 +189,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const crJson = cashRegister.toJSON();
-    if (crJson.user) {
-      crJson.user.name = `${crJson.user.firstName} ${crJson.user.lastName}`.trim();
-    }
+    const crJson = normalizeCashRegisterUser(cashRegister.toJSON());
 
     res.json({ cashRegister: crJson });
   } catch (error) {
@@ -291,19 +289,10 @@ router.post('/open', authenticateToken, async (req, res) => {
 
     // Fetch with user info
     const cashRegisterWithUser = await CashRegister.findByPk(cashRegister.id, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'firstName', 'lastName', 'email']
-        }
-      ]
+      include: cashRegisterUserIncludes
     });
 
-    const crJson = cashRegisterWithUser.toJSON();
-    if (crJson.user) {
-      crJson.user.name = `${crJson.user.firstName} ${crJson.user.lastName}`.trim();
-    }
+    const crJson = normalizeCashRegisterUser(cashRegisterWithUser.toJSON());
 
     res.status(201).json({ cashRegister: crJson });
   } catch (error) {
@@ -358,19 +347,10 @@ router.post('/:id/close', authenticateToken, async (req, res) => {
 
     // Fetch with user info
     const cashRegisterWithUser = await CashRegister.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'firstName', 'lastName', 'email']
-        }
-      ]
+      include: cashRegisterUserIncludes
     });
 
-    const crJson = cashRegisterWithUser.toJSON();
-    if (crJson.user) {
-      crJson.user.name = `${crJson.user.firstName} ${crJson.user.lastName}`.trim();
-    }
+    const crJson = normalizeCashRegisterUser(cashRegisterWithUser.toJSON());
 
     res.json({ cashRegister: crJson });
   } catch (error) {
@@ -421,23 +401,19 @@ router.get('/export', authenticateToken, async (req, res) => {
 
     const cashRegisters = await CashRegister.findAll({
       where,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['firstName', 'lastName', 'email']
-        }
-      ],
+      include: cashRegisterUserIncludes,
       order: [['openedAt', 'DESC']]
     });
 
     const csvUtils = require('../utils/csvGenerator');
     csvUtils.validateDataSize(cashRegisters);
 
-    const csvData = cashRegisters.map(cr => ({
+    const csvData = cashRegisters.map(cr => {
+      const crJson = normalizeCashRegisterUser(cr.toJSON());
+      return {
       fechaApertura: csvUtils.formatDateTimeForCSV(cr.openedAt),
       fechaCierre: cr.closedAt ? csvUtils.formatDateTimeForCSV(cr.closedAt) : 'Abierta',
-      usuario: cr.user ? `${cr.user.firstName} ${cr.user.lastName}`.trim() : 'N/A',
+      usuario: crJson.user?.name || 'N/A',
       montoInicial: csvUtils.formatNumberForCSV(cr.initialAmount),
       efectivoEsperado: csvUtils.formatNumberForCSV(cr.expectedCash),
       efectivoReal: cr.actualCash ? csvUtils.formatNumberForCSV(cr.actualCash) : '-',
@@ -449,7 +425,8 @@ router.get('/export', authenticateToken, async (req, res) => {
       diferencia: cr.cashDifference ? csvUtils.formatNumberForCSV(cr.cashDifference) : '-',
       estado: cr.closedAt ? 'Cerrada' : 'Abierta',
       observaciones: cr.closingNotes || ''
-    }));
+    };
+    });
 
     const fields = [
       { label: 'Fecha Apertura', value: 'fechaApertura' },
@@ -520,22 +497,21 @@ router.get('/daily-closing/export', authenticateToken, async (req, res) => {
 
     const cashRegisters = await CashRegister.findAll({
       where,
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName'] }
-      ],
+      include: cashRegisterUserIncludes,
       order: [['closedAt', 'DESC']]
     });
 
     const csvUtils = require('../utils/csvGenerator');
 
     const csvData = cashRegisters.map(cr => {
+      const crJson = normalizeCashRegisterUser(cr.toJSON());
       const expectedCash = parseFloat(cr.initialAmount || 0) + parseFloat(cr.totalCashSales || 0) - parseFloat(cr.totalCashExpenses || 0);
       const actualCash = parseFloat(cr.actualCash || 0);
       const difference = actualCash - expectedCash;
 
       return {
         fechaCierre: csvUtils.formatDateTimeForCSV(cr.closedAt),
-        usuario: cr.user ? `${cr.user.firstName || ''} ${cr.user.lastName || ''}`.trim() : '-',
+        usuario: crJson.user?.name || '-',
         montoInicial: csvUtils.formatNumberForCSV(cr.initialAmount || 0),
         ventasEfectivo: csvUtils.formatNumberForCSV(cr.totalCashSales || 0),
         ventasTarjeta: csvUtils.formatNumberForCSV(cr.totalCardSales || 0),
