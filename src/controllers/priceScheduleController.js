@@ -320,7 +320,11 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
 
     // Convert times to minutes for easier calculation
     const bookingStartMinutes = timeToMinutes(startTime);
-    const bookingEndMinutes = timeToMinutes(endTime);
+    let bookingEndMinutes = timeToMinutes(endTime);
+    // Handle cross-midnight bookings (e.g. 23:30 -> 00:30)
+    if (bookingEndMinutes <= bookingStartMinutes) {
+      bookingEndMinutes += 1440;
+    }
 
     // For each minute of the booking, find which schedule applies
     let currentMinute = bookingStartMinutes;
@@ -331,18 +335,23 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
       // This means 08:00-18:00 includes minutes 08:00-17:59, and 18:00-23:00 includes 18:00-22:59
       let appliedSchedule = null;
       
+      const normalizedMinute = currentMinute % 1440;
       for (const schedule of applicableSchedules) {
         const scheduleStart = timeToMinutes(schedule.startTime);
         const scheduleEnd = timeToMinutes(schedule.endTime);
         
-        if (currentMinute >= scheduleStart && currentMinute < scheduleEnd) {
+        if (normalizedMinute >= scheduleStart && normalizedMinute < scheduleEnd) {
           appliedSchedule = schedule;
           break;
         }
       }
 
       if (appliedSchedule) {
-        const scheduleEnd = timeToMinutes(appliedSchedule.endTime);
+        let scheduleEnd = timeToMinutes(appliedSchedule.endTime);
+        // Lift scheduleEnd into extended range when we've crossed midnight
+        while (scheduleEnd <= currentMinute) {
+          scheduleEnd += 1440;
+        }
         const segmentEnd = Math.min(scheduleEnd, bookingEndMinutes);
         const segmentMinutes = segmentEnd - currentMinute;
         const segmentPrice = (parseFloat(appliedSchedule.pricePerHour) / 60) * segmentMinutes;
@@ -412,13 +421,16 @@ function timeToMinutes(timeStr) {
 }
 
 function minutesToTime(minutes) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const normalized = ((minutes % 1440) + 1440) % 1440; // Handle negative and >1440
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
 function calculateMinutesBetween(startTime, endTime) {
-  return timeToMinutes(endTime) - timeToMinutes(startTime);
+  let diff = timeToMinutes(endTime) - timeToMinutes(startTime);
+  if (diff <= 0) diff += 1440; // Cross-midnight
+  return diff;
 }
 
 function findNextScheduleStart(currentMinute, schedules, maxMinute) {
