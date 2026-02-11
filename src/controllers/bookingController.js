@@ -363,8 +363,9 @@ const createBooking = async (req, res) => {
     );
 
     // Send WhatsApp notification directly via Cloud API (async, fire-and-forget)
+    // Skip for recurring bookings (turnos fijos) — they'll use a different template
     const waPhone = bookingWithDetails.clientPhone || bookingWithDetails.user?.phone;
-    if (waPhone) {
+    if (waPhone && !isRecurring) {
       const establishment = bookingWithDetails.court?.establishment || bookingWithDetails.establishment;
       const [y, m, d] = (bookingWithDetails.date || '').split('-');
       const fmtDate = `${d}/${m}/${y}`;
