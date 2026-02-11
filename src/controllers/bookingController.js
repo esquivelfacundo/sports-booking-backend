@@ -1,8 +1,11 @@
 const { Booking, Court, Establishment, User, Payment, SplitPayment, SplitPaymentParticipant, Client, Order, Amenity, BookingPayment } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const axios = require('axios');
 const WebhookService = require('../services/webhookService');
 const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
+
+const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/jee5bgqqkqesehnkwmdfsw70tnt8nedh';
 
 const createBooking = async (req, res) => {
   try {
@@ -321,7 +324,7 @@ const createBooking = async (req, res) => {
           include: [{
             model: Establishment,
             as: 'establishment',
-            attributes: ['id', 'name', 'address', 'city', 'phone']
+            attributes: ['id', 'name', 'slug', 'address', 'city', 'phone']
           }]
         },
         {
@@ -347,6 +350,11 @@ const createBooking = async (req, res) => {
         })
         .catch(err => console.error('[Webhook] Error:', err));
     }
+
+    // Send booking data to Make.com webhook (async, fire-and-forget)
+    sendBookingToMakeWebhook(bookingWithDetails).catch(err =>
+      console.error('[Make Webhook] Error:', err.message)
+    );
 
     res.status(201).json({
       message: isRecurring 
@@ -1418,6 +1426,70 @@ const exportBookingsToCSV = async (req, res) => {
     });
   }
 };
+
+/**
+ * Send booking data to Make.com webhook for WhatsApp notifications
+ * Sends: QR image link, establishment name, formatted date/time, court name,
+ *        deposit paid, pending balance, booking link, establishment slug
+ */
+async function sendBookingToMakeWebhook(bookingWithDetails) {
+  try {
+    const b = bookingWithDetails;
+    const establishment = b.court?.establishment || b.establishment;
+    const courtName = b.court?.name || 'Sin cancha';
+    const establishmentName = establishment?.name || 'Establecimiento';
+    const establishmentSlug = establishment?.slug || '';
+
+    // Format date as DD/MM/YYYY
+    const [year, month, day] = (b.date || '').split('-');
+    const formattedDate = `${day}/${month}/${year}`;
+
+    // Format time as HH:MM
+    const startTime = (b.startTime || '').slice(0, 5);
+
+    // Calculate amounts
+    const totalAmount = parseFloat(b.totalAmount) || 0;
+    const depositAmount = parseFloat(b.depositAmount) || 0;
+    const pendingAmount = totalAmount - depositAmount;
+
+    // Build URLs
+    const frontendUrl = process.env.FRONTEND_PROD_URL || process.env.FRONTEND_URL || 'https://www.miscanchas.com';
+    const backendUrl = process.env.BACKEND_URL || 'https://web-production-934d4.up.railway.app';
+    const bookingLink = `${frontendUrl}/reserva/${b.id}`;
+    const bookingPath = `reserva/${b.id}`;
+    const qrImageUrl = `${backendUrl}/api/bookings/${b.id}/qr.png`;
+
+    const payload = {
+      bookingId: b.id,
+      establishmentName,
+      establishmentSlug,
+      courtName,
+      date: formattedDate,
+      time: startTime,
+      dateTime: `${formattedDate} a las ${startTime}`,
+      depositPaid: depositAmount,
+      pendingBalance: pendingAmount,
+      totalAmount,
+      status: b.status,
+      clientName: b.clientName || '',
+      clientPhone: b.clientPhone || '',
+      qrImageUrl,
+      bookingLink,
+      bookingPath,
+    };
+
+    console.log('[Make Webhook] Sending booking data:', JSON.stringify(payload, null, 2));
+
+    const response = await axios.post(MAKE_WEBHOOK_URL, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+
+    console.log(`[Make Webhook] Sent successfully for booking ${b.id}, status: ${response.status}`);
+  } catch (error) {
+    console.error(`[Make Webhook] Failed to send for booking:`, error.message);
+  }
+}
 
 module.exports = {
   createBooking,
