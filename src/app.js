@@ -85,6 +85,18 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Temporary diagnostic endpoint - remove after debugging
+app.get('/debug/whatsapp-config', (req, res) => {
+  res.json({
+    hasAccessToken: !!process.env.WHATSAPP_ACCESS_TOKEN,
+    accessTokenLength: (process.env.WHATSAPP_ACCESS_TOKEN || '').length,
+    hasPhoneNumberId: !!process.env.WHATSAPP_PHONE_NUMBER_ID,
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || 'NOT SET',
+    hasBackendUrl: !!process.env.BACKEND_URL,
+    backendUrl: process.env.BACKEND_URL || 'NOT SET',
+  });
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
