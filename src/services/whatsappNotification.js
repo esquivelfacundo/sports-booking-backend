@@ -127,7 +127,7 @@ async function sendBookingWhatsApp(bookingData) {
           sub_type: 'url',
           index: '0',
           parameters: [
-            { type: 'text', text: `reserva/${bookingId}` },
+            { type: 'text', text: `reservar/confirmacion?bookingId=${bookingId}` },
           ],
         },
         {
