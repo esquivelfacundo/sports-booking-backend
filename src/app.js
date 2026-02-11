@@ -97,6 +97,30 @@ app.get('/debug/whatsapp-config', (req, res) => {
   });
 });
 
+// Temporary test endpoint - sends a real WhatsApp test message
+app.get('/debug/whatsapp-test', async (req, res) => {
+  const phone = req.query.phone;
+  if (!phone) return res.status(400).json({ error: 'Provide ?phone=XXXXXXXXXX' });
+  try {
+    const { sendBookingWhatsApp } = require('./services/whatsappNotification');
+    const result = await sendBookingWhatsApp({
+      clientPhone: phone,
+      clientName: 'Test Usuario',
+      establishmentName: 'Test Establecimiento',
+      establishmentSlug: 'test',
+      courtName: 'Cancha 1',
+      dateTime: '11/02/2026 a las 18:00',
+      depositPaid: 5000,
+      pendingBalance: 5000,
+      bookingId: '00000000-0000-0000-0000-000000000000',
+      qrImageUrl: 'https://web-production-934d4.up.railway.app/api/bookings/00000000-0000-0000-0000-000000000000/qr.png',
+    });
+    res.json({ result });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
