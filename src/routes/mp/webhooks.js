@@ -114,7 +114,7 @@ async function processPaymentNotification(paymentId, action) {
   }
 
   try {
-    const paymentData = await mpService.getPayment(paymentId);
+    let paymentData = await mpService.getPayment(paymentId);
 
     console.log('');
     console.log('💳 PAYMENT DETAILS:');
@@ -124,6 +124,29 @@ async function processPaymentNotification(paymentId, action) {
     console.log('   Amount:', paymentData.amount, paymentData.currency);
     console.log('   Method:', paymentData.paymentMethod);
     console.log('   External Reference:', paymentData.externalReference);
+    console.log('   Metadata:', JSON.stringify(paymentData.metadata));
+
+    // For split payments, metadata may be empty when fetched with platform token.
+    // Try re-fetching with the seller's access token.
+    const metaKeys = paymentData.metadata ? Object.keys(paymentData.metadata) : [];
+    if (metaKeys.length === 0 || (!paymentData.metadata?.court_id && !paymentData.metadata?.courtId)) {
+      console.log('   ⚠️ Metadata missing or incomplete, trying seller token...');
+      // Try to find establishment by iterating all active MP-connected establishments
+      const establishments = await Establishment.findAll({ where: { mpActive: true, mpAccessToken: { [Op.ne]: null } }, attributes: ['id', 'mpAccessToken'] });
+      for (const est of establishments) {
+        try {
+          const sellerPayment = await mpService.getPayment(paymentId, est.mpAccessToken);
+          const sellerMeta = sellerPayment.metadata ? Object.keys(sellerPayment.metadata) : [];
+          if (sellerMeta.length > 0 && (sellerPayment.metadata?.court_id || sellerPayment.metadata?.courtId)) {
+            console.log(`   ✅ Found metadata via seller ${est.id}`);
+            paymentData = sellerPayment;
+            break;
+          }
+        } catch (e) {
+          // Not this seller's payment, continue
+        }
+      }
+    }
 
     // Parse external reference to get booking ID
     const extRef = paymentData.externalReference || '';
@@ -138,8 +161,13 @@ async function processPaymentNotification(paymentId, action) {
     }
 
     // If payment approved and no existing booking, create one from metadata
-    if (paymentData.status === 'approved' && !bookingId && paymentData.metadata) {
+    const hasMetadata = paymentData.metadata && Object.keys(paymentData.metadata).length > 0;
+    console.log('   📋 bookingId:', bookingId, '| hasMetadata:', hasMetadata, '| status:', paymentData.status);
+    
+    if (paymentData.status === 'approved' && !bookingId && hasMetadata) {
       bookingId = await createBookingFromPayment(paymentData);
+    } else if (paymentData.status === 'approved' && !bookingId && !hasMetadata) {
+      console.log('   ❌ Payment approved but NO metadata found — cannot create booking or send WhatsApp');
     }
 
     // Update booking status based on payment
