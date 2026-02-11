@@ -689,6 +689,7 @@ router.post('/', authenticateToken, async (req, res) => {
       items, // Array of { productId, quantity, notes, unitPrice }
       paymentMethod,
       paidAmount,
+      payments, // Optional array of { amount, paymentMethod, playerName? }
       discount = 0,
       notes
     } = req.body;
@@ -777,7 +778,12 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const total = subtotal - parseFloat(discount);
-    const paid = parseFloat(paidAmount) || 0;
+
+    // Calculate total paid from payments array or single paidAmount
+    const hasPaymentsArray = Array.isArray(payments) && payments.length > 0;
+    const paid = hasPaymentsArray
+      ? payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+      : (parseFloat(paidAmount) || 0);
 
     // Determine payment status
     let paymentStatus = 'pending';
@@ -798,7 +804,9 @@ router.post('/', authenticateToken, async (req, res) => {
       orderType: 'direct_sale',
       status: 'completed',
       paymentStatus,
-      paymentMethod: paymentMethod || 'pending',
+      paymentMethod: hasPaymentsArray
+        ? (payments.length === 1 ? payments[0].paymentMethod : 'mixed')
+        : (paymentMethod || 'pending'),
       subtotal,
       discount,
       total,
@@ -815,16 +823,35 @@ router.post('/', authenticateToken, async (req, res) => {
       }, { transaction });
     }
 
-    // Create payment record if paid
-    if (paid > 0 && paymentMethod && paymentMethod !== 'pending') {
+    // Create payment records (supports multiple payments array or single payment)
+    if (hasPaymentsArray) {
+      for (const p of payments) {
+        const pAmt = parseFloat(p.amount) || 0;
+        if (pAmt <= 0) continue;
+        await OrderPayment.create({
+          orderId: order.id,
+          amount: pAmt,
+          paymentMethod: p.paymentMethod,
+          notes: p.playerName || null,
+          registeredBy: req.user.id
+        }, { transaction });
+        await registerSaleMovement({
+          cashRegisterId: cashRegister.id,
+          establishmentId,
+          orderId: order.id,
+          amount: pAmt,
+          paymentMethod: p.paymentMethod,
+          description: `Venta directa #${orderNumber}${p.playerName ? ` (${p.playerName})` : ''}`,
+          registeredBy: req.user.id
+        }, transaction);
+      }
+    } else if (paid > 0 && paymentMethod && paymentMethod !== 'pending') {
       await OrderPayment.create({
         orderId: order.id,
         amount: paid,
         paymentMethod,
         registeredBy: req.user.id
       }, { transaction });
-
-      // Register cash register movement
       await registerSaleMovement({
         cashRegisterId: cashRegister.id,
         establishmentId,
