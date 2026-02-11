@@ -3,7 +3,7 @@ const { Op } = require('sequelize');
 const crypto = require('crypto');
 const axios = require('axios');
 const WebhookService = require('../services/webhookService');
-const { sendBookingWhatsApp } = require('../services/whatsappNotification');
+const { sendBookingWhatsApp, sendRecurringBookingWhatsApp } = require('../services/whatsappNotification');
 const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
 
 const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/jee5bgqqkqesehnkwmdfsw70tnt8nedh';
@@ -388,6 +388,28 @@ const createBooking = async (req, res) => {
         bookingId: bookingWithDetails.id,
         qrImageUrl: `${process.env.BACKEND_URL || 'https://web-production-934d4.up.railway.app'}/api/bookings/${bookingWithDetails.id}/qr.png`,
       }).catch(err => console.error('[WhatsApp Notification] Error:', err.message));
+    }
+
+    // Send WhatsApp notification for recurring bookings (turnos fijos) — one message only
+    if (waPhone && isRecurring) {
+      const establishment = bookingWithDetails.court?.establishment || bookingWithDetails.establishment;
+      const fmtTime = (bookingWithDetails.startTime || '').slice(0, 5);
+      const waName = bookingWithDetails.clientName
+        || (bookingWithDetails.user ? `${bookingWithDetails.user.firstName} ${bookingWithDetails.user.lastName}`.trim() : null)
+        || 'Cliente';
+
+      // Get day of week name in Spanish from the booking date
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const bookingDate = new Date(bookingWithDetails.date + 'T12:00:00');
+      const dayName = dayNames[bookingDate.getDay()];
+
+      sendRecurringBookingWhatsApp({
+        clientPhone: waPhone,
+        clientName: waName,
+        establishmentName: establishment?.name || 'Establecimiento',
+        courtName: bookingWithDetails.court?.name || 'Sin cancha',
+        dayAndTime: `${dayName} a las ${fmtTime}`,
+      }).catch(err => console.error('[WhatsApp Notification] Recurring error:', err.message));
     }
 
     res.status(201).json({

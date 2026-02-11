@@ -166,7 +166,95 @@ async function sendBookingWhatsApp(bookingData) {
   }
 }
 
+/**
+ * Send a WhatsApp template message for recurring bookings (turnos fijos)
+ * Template: turnos_fijos (es_AR)
+ * 
+ * Header: Image (MisCanchas logo)
+ * Body params: {{1}} clientName, {{2}} establishmentName, {{3}} dayAndTime (e.g. "Martes a las 18:00"),
+ *              {{4}} courtName
+ */
+async function sendRecurringBookingWhatsApp(bookingData) {
+  const {
+    clientPhone,
+    clientName,
+    establishmentName,
+    courtName,
+    dayAndTime,
+  } = bookingData;
+
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!accessToken || !phoneNumberId) {
+    console.log('[WhatsApp Notification] Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID');
+    return { success: false, reason: 'WhatsApp not configured' };
+  }
+
+  const recipientPhone = normalizeArgentinePhone(clientPhone);
+  if (!recipientPhone) {
+    console.log('[WhatsApp Notification] No valid phone number for recurring booking');
+    return { success: false, reason: 'No valid phone number' };
+  }
+
+  const logoUrl = 'https://www.miscanchas.com/assets/logos/miscanchas-whatsapp.png';
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: recipientPhone,
+    type: 'template',
+    template: {
+      name: 'turnos_fijos',
+      language: { code: 'es_AR' },
+      components: [
+        {
+          type: 'header',
+          parameters: [
+            {
+              type: 'image',
+              image: { link: logoUrl },
+            },
+          ],
+        },
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', text: clientName || 'Cliente' },
+            { type: 'text', text: establishmentName },
+            { type: 'text', text: dayAndTime },
+            { type: 'text', text: courtName },
+          ],
+        },
+      ],
+    },
+  };
+
+  try {
+    console.log(`[WhatsApp Notification] Sending recurring booking msg to ${recipientPhone}`);
+
+    const response = await axios.post(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      }
+    );
+
+    console.log(`[WhatsApp Notification] Recurring booking sent to ${recipientPhone}, message ID: ${response.data?.messages?.[0]?.id}`);
+    return { success: true, messageId: response.data?.messages?.[0]?.id };
+  } catch (error) {
+    const errData = error.response?.data?.error || error.message;
+    console.error(`[WhatsApp Notification] Failed to send recurring to ${recipientPhone}:`, JSON.stringify(errData));
+    return { success: false, error: errData };
+  }
+}
+
 module.exports = {
   normalizeArgentinePhone,
   sendBookingWhatsApp,
+  sendRecurringBookingWhatsApp,
 };
