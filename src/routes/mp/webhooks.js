@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const mpService = require('../../services/mercadopago');
-const { Booking, Payment, Court, Establishment, ClientDebt } = require('../../models');
+const { Booking, Payment, Court, Establishment, ClientDebt, User } = require('../../models');
 const { Op } = require('sequelize');
 const emailService = require('../../services/email');
 const qrService = require('../../services/qrcode');
+const { sendBookingWhatsApp } = require('../../services/whatsappNotification');
 const EventEmitter = require('events');
 
 // Event emitter for webhook events
@@ -346,6 +347,42 @@ async function createBookingFromPayment(paymentData) {
       await emailService.sendEstablishmentNotification(booking, establishment, court);
       
       console.log(`   📧 Confirmation emails sent`);
+
+      // Send WhatsApp notification
+      const waPhone = metadata.clientPhone;
+      if (waPhone) {
+        const [y, m, d] = (metadata.date || '').split('-');
+        const fmtDate = `${d}/${m}/${y}`;
+        const fmtTime = (metadata.startTime || '').slice(0, 5);
+
+        sendBookingWhatsApp({
+          clientPhone: waPhone,
+          clientName: metadata.clientName || 'Cliente',
+          establishmentName: establishment?.name || 'Establecimiento',
+          establishmentSlug: establishment?.slug || '',
+          courtName: court?.name || 'Sin cancha',
+          dateTime: `${fmtDate} a las ${fmtTime}`,
+          depositPaid: depositForEstablishment,
+          pendingBalance: fullPrice - depositForEstablishment,
+          bookingId: booking.id,
+          qrImageUrl: `${process.env.BACKEND_URL || 'https://web-production-934d4.up.railway.app'}/api/bookings/${booking.id}/qr.png`,
+        }).catch(err => console.error('[WhatsApp Notification] Error:', err.message));
+
+        console.log(`   📱 WhatsApp notification queued for ${waPhone}`);
+      }
+
+      // Save phone to user account if user exists and has no phone
+      if (metadata.userId && waPhone) {
+        try {
+          const userRecord = await User.findByPk(metadata.userId);
+          if (userRecord && !userRecord.phone) {
+            await userRecord.update({ phone: waPhone });
+            console.log(`   📞 Phone saved to user ${metadata.userId}`);
+          }
+        } catch (phoneErr) {
+          console.error('   ⚠️ Error saving phone to user:', phoneErr.message);
+        }
+      }
     } catch (emailError) {
       console.error('   ⚠️ Error sending emails:', emailError.message);
     }
