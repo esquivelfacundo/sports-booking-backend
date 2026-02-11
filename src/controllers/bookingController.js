@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const crypto = require('crypto');
 const axios = require('axios');
 const WebhookService = require('../services/webhookService');
+const { sendBookingWhatsApp } = require('../services/whatsappNotification');
 const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
 
 const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/jee5bgqqkqesehnkwmdfsw70tnt8nedh';
@@ -328,6 +329,11 @@ const createBooking = async (req, res) => {
           }]
         },
         {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'phone', 'email']
+        },
+        {
           model: SplitPayment,
           as: 'splitPayment',
           include: [{
@@ -355,6 +361,33 @@ const createBooking = async (req, res) => {
     sendBookingToMakeWebhook(bookingWithDetails).catch(err =>
       console.error('[Make Webhook] Error:', err.message)
     );
+
+    // Send WhatsApp notification directly via Cloud API (async, fire-and-forget)
+    const waPhone = bookingWithDetails.clientPhone || bookingWithDetails.user?.phone;
+    if (waPhone) {
+      const establishment = bookingWithDetails.court?.establishment || bookingWithDetails.establishment;
+      const [y, m, d] = (bookingWithDetails.date || '').split('-');
+      const fmtDate = `${d}/${m}/${y}`;
+      const fmtTime = (bookingWithDetails.startTime || '').slice(0, 5);
+      const total = parseFloat(bookingWithDetails.totalAmount) || 0;
+      const deposit = parseFloat(bookingWithDetails.depositAmount) || 0;
+      const waName = bookingWithDetails.clientName
+        || (bookingWithDetails.user ? `${bookingWithDetails.user.firstName} ${bookingWithDetails.user.lastName}`.trim() : null)
+        || 'Cliente';
+
+      sendBookingWhatsApp({
+        clientPhone: waPhone,
+        clientName: waName,
+        establishmentName: establishment?.name || 'Establecimiento',
+        establishmentSlug: establishment?.slug || '',
+        courtName: bookingWithDetails.court?.name || 'Sin cancha',
+        dateTime: `${fmtDate} a las ${fmtTime}`,
+        depositPaid: deposit,
+        pendingBalance: total - deposit,
+        bookingId: bookingWithDetails.id,
+        qrImageUrl: `${process.env.BACKEND_URL || 'https://web-production-934d4.up.railway.app'}/api/bookings/${bookingWithDetails.id}/qr.png`,
+      }).catch(err => console.error('[WhatsApp Notification] Error:', err.message));
+    }
 
     res.status(201).json({
       message: isRecurring 
