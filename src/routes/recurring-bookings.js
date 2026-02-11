@@ -14,6 +14,7 @@ const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const crypto = require('crypto');
 const { getUserActiveCashRegister, registerSaleMovement } = require('../utils/cashRegisterHelper');
+const { sendRecurringBookingWhatsApp } = require('../services/whatsappNotification');
 
 // Helper: Calculate end time from start time and duration
 function calculateEndTime(startTime, durationMinutes) {
@@ -481,7 +482,22 @@ router.post('/', authenticateToken, async (req, res) => {
     }
     
     await transaction.commit();
-    
+
+    // Send WhatsApp notification for recurring booking (one message only)
+    if (clientPhone) {
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const dayName = dayNames[dayOfWeek];
+      const fmtTime = startTime.slice(0, 5);
+
+      sendRecurringBookingWhatsApp({
+        clientPhone,
+        clientName: clientName || 'Cliente',
+        establishmentName: establishment?.name || 'Establecimiento',
+        courtName: court?.name || 'Sin cancha',
+        dayAndTime: `${dayName} a las ${fmtTime}`,
+      }).catch(err => console.error('[WhatsApp Notification] Recurring error:', err.message));
+    }
+
     res.status(201).json({
       success: true,
       message: `Turno fijo creado con ${createdBookings.length} reservas`,
