@@ -391,6 +391,7 @@ const createBooking = async (req, res) => {
     }
 
     // Send WhatsApp notification for recurring bookings (turnos fijos) — one message only
+    console.log(`[WhatsApp Debug] waPhone: ${waPhone}, isRecurring: ${isRecurring}`);
     if (waPhone && isRecurring) {
       const establishment = bookingWithDetails.court?.establishment || bookingWithDetails.establishment;
       const fmtTime = (bookingWithDetails.startTime || '').slice(0, 5);

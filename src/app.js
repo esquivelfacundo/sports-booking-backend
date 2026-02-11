@@ -121,6 +121,25 @@ app.get('/debug/whatsapp-test', async (req, res) => {
   }
 });
 
+// Temporary test endpoint for recurring booking WhatsApp
+app.get('/debug/whatsapp-test-recurring', async (req, res) => {
+  const phone = req.query.phone;
+  if (!phone) return res.status(400).json({ error: 'Provide ?phone=XXXXXXXXXX' });
+  try {
+    const { sendRecurringBookingWhatsApp } = require('./services/whatsappNotification');
+    const result = await sendRecurringBookingWhatsApp({
+      clientPhone: phone,
+      clientName: 'Test Usuario',
+      establishmentName: 'Test Establecimiento',
+      courtName: 'Cancha 1',
+      dayAndTime: 'Martes a las 18:00',
+    });
+    res.json({ result });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
