@@ -340,7 +340,16 @@ const calculateBookingPrice = async (courtId, startTime, endTime, bookingDate) =
         const scheduleStart = timeToMinutes(schedule.startTime);
         const scheduleEnd = timeToMinutes(schedule.endTime);
         
-        if (normalizedMinute >= scheduleStart && normalizedMinute < scheduleEnd) {
+        let matches = false;
+        if (scheduleEnd > scheduleStart) {
+          // Normal schedule (e.g., 10:00 → 13:00)
+          matches = normalizedMinute >= scheduleStart && normalizedMinute < scheduleEnd;
+        } else if (scheduleEnd <= scheduleStart && scheduleEnd !== scheduleStart) {
+          // Cross-midnight schedule (e.g., 20:00 → 00:00 or 22:00 → 02:00)
+          matches = normalizedMinute >= scheduleStart || normalizedMinute < scheduleEnd;
+        }
+        
+        if (matches) {
           appliedSchedule = schedule;
           break;
         }
@@ -436,7 +445,11 @@ function calculateMinutesBetween(startTime, endTime) {
 function findNextScheduleStart(currentMinute, schedules, maxMinute) {
   let nextStart = maxMinute;
   for (const schedule of schedules) {
-    const scheduleStart = timeToMinutes(schedule.startTime);
+    let scheduleStart = timeToMinutes(schedule.startTime);
+    // If schedule start is behind current minute, it might be in the next day cycle
+    if (scheduleStart <= currentMinute) {
+      scheduleStart += 1440;
+    }
     if (scheduleStart > currentMinute && scheduleStart < nextStart) {
       nextStart = scheduleStart;
     }
