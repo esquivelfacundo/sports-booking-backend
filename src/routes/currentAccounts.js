@@ -349,11 +349,11 @@ router.post('/establishment/:establishmentId/auto-create-staff', authenticateTok
     const { establishmentId } = req.params;
     const { useCostPrice = true, discountPercentage = 0 } = req.body;
 
-    // Get all active staff users for this establishment (users with establishmentId and isStaff=true)
+    // Get all active staff users for this establishment (users with establishmentId and staffRole)
     const staffUsers = await User.findAll({
       where: { 
         establishmentId, 
-        isStaff: true,
+        staffRole: { [Op.ne]: null },
         isActive: true
       },
       include: [{
